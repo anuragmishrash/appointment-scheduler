@@ -1,0 +1,49 @@
+[2025-06-07T16:44:12.897Z] INFO: Server running on port 5000
+[2025-06-07T16:44:15.927Z] INFO: MongoDB connected, initializing scheduler
+[2025-06-07T16:44:16.086Z] INFO: Appointment reminder scheduler initialized successfully
+[2025-06-07T16:45:00.066Z] INFO: Running appointment reminder check
+[2025-06-07T16:45:00.068Z] INFO: Checking for appointments between 2025-06-07T16:45:00.068Z and 2025-06-07T17:45:00.068Z
+[2025-06-07T16:46:00.049Z] INFO: Running appointment reminder check
+[2025-06-07T16:46:00.050Z] INFO: Checking for appointments between 2025-06-07T16:46:00.050Z and 2025-06-07T17:46:00.050Z
+[2025-06-07T16:47:00.037Z] INFO: Running appointment reminder check
+[2025-06-07T16:47:00.044Z] INFO: Checking for appointments between 2025-06-07T16:47:00.044Z and 2025-06-07T17:47:00.044Z
+[2025-06-07T16:48:00.046Z] INFO: Running appointment reminder check
+[2025-06-07T16:48:00.059Z] INFO: Checking for appointments between 2025-06-07T16:48:00.059Z and 2025-06-07T17:48:00.059Z
+[2025-06-07T16:50:23.820Z] INFO: Server running on port 5000
+[2025-06-07T16:50:28.467Z] INFO: MongoDB connected, initializing scheduler
+[2025-06-07T16:50:28.502Z] INFO: Appointment reminder scheduler initialized successfully
+[2025-06-07T16:51:00.026Z] INFO: Running appointment reminder check
+[2025-06-07T16:51:00.027Z] INFO: Checking for appointments between 2025-06-07T16:51:00.027Z and 2025-06-07T17:51:00.027Z
+[2025-06-07T16:51:00.216Z] INFO: Found 0 upcoming appointments needing reminders
+[2025-06-07T16:52:00.025Z] INFO: Running appointment reminder check
+[2025-06-07T16:52:00.025Z] INFO: Checking for appointments between 2025-06-07T16:52:00.025Z and 2025-06-07T17:52:00.025Z
+[2025-06-07T16:52:00.226Z] INFO: Found 0 upcoming appointments needing reminders
+[2025-06-07T16:56:46.533Z] WARN: Using test email account as SMTP settings are not configured
+[2025-06-07T16:57:00.518Z] INFO: Email sent: <2e6f4280-27e9-d451-9485-116db4f00eb3@example.com>
+[2025-06-07T16:57:00.518Z] INFO: Reminder email sent to user user@example.com for appointment 68446f4d1075bca14aa1fccd
+[2025-06-07T16:57:05.034Z] INFO: Email sent: <2f62212e-4c79-5523-f35b-abd2840a6d2f@example.com>
+[2025-06-07T16:57:05.035Z] INFO: Reminder email sent to business salon@example.com for appointment 68446f4d1075bca14aa1fccd
+[2025-06-07T16:58:29.977Z] INFO: Server running on port 5000
+[2025-06-07T16:58:31.450Z] INFO: MongoDB connected, initializing scheduler
+[2025-06-07T16:58:31.481Z] INFO: Appointment reminder scheduler initialized successfully
+[2025-06-07T16:59:00.028Z] INFO: Running appointment reminder check
+[2025-06-07T16:59:00.029Z] INFO: Checking for appointments between 2025-06-07T16:59:00.029Z and 2025-06-07T17:59:00.029Z
+[2025-06-07T16:59:00.319Z] INFO: Found 0 upcoming appointments needing reminders
+[2025-06-07T17:00:00.023Z] INFO: Running appointment reminder check
+[2025-06-07T17:00:00.023Z] INFO: Checking for appointments between 2025-06-07T17:00:00.023Z and 2025-06-07T18:00:00.023Z
+[2025-06-07T17:00:00.892Z] INFO: Found 0 upcoming appointments needing reminders
+[2025-06-07T17:01:00.019Z] INFO: Running appointment reminder check
+[2025-06-07T17:01:00.020Z] INFO: Checking for appointments between 2025-06-07T17:01:00.020Z and 2025-06-07T18:01:00.020Z
+[2025-06-07T17:01:00.346Z] INFO: Found 0 upcoming appointments needing reminders
+[2025-06-07T17:02:00.023Z] INFO: Running appointment reminder check
+[2025-06-07T17:02:00.024Z] INFO: Checking for appointments between 2025-06-07T17:02:00.024Z and 2025-06-07T18:02:00.024Z
+[2025-06-07T17:02:00.486Z] INFO: Found 0 upcoming appointments needing reminders
+[2025-06-07T17:03:00.021Z] INFO: Checking for appointments between 2025-06-07T17:03:00.021Z and 2025-06-07T18:03:00.021Z
+[2025-06-07T17:03:00.021Z] INFO: Running appointment reminder check
+[2025-06-07T17:03:00.129Z] INFO: Found 0 upcoming appointments needing reminders
+[2025-06-07T17:04:00.029Z] INFO: Checking for appointments between 2025-06-07T17:04:00.029Z and 2025-06-07T18:04:00.029Z
+[2025-06-07T17:04:00.028Z] INFO: Running appointment reminder check
+[2025-06-07T17:04:00.463Z] INFO: Found 0 upcoming appointments needing reminders
+[2025-06-07T17:05:00.022Z] INFO: Running appointment reminder check
+[2025-06-07T17:05:00.023Z] INFO: Checking for appointments between 2025-06-07T17:05:00.023Z and 2025-06-07T18:05:00.023Z
+[2025-06-07T17:05:07.069Z] INFO: Found 0 upcoming appointments needing reminders
