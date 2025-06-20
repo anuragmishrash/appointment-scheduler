@@ -62,6 +62,11 @@ app.use('/api/availability', availabilityRoutes);
 app.use('/api/services', serviceRoutes);
 app.use('/api/users', userRoutes);
 
+// Root route (for health check or friendly message)
+app.get('/', (req, res) => {
+  res.send('🚀 Appointment Scheduler Backend is Running!');
+});
+
 // Serve static assets in production
 if (process.env.NODE_ENV === 'production') {
   app.use(express.static(path.join(__dirname, '../client/build')));
