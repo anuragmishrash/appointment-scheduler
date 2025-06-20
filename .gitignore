@@ -1,0 +1,21 @@
+# Node.js
+node_modules/
+*.log
+.env
+
+# React build
+client/build/
+client/node_modules/
+client/.cache/
+client/public/.cache/
+client/.vite/
+client/.parcel-cache/
+
+# VSCode
+.vscode/
+
+# OS files
+.DS_Store
+Thumbs.db
+node_modules
+node_modules
