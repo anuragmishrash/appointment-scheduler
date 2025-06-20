@@ -42,7 +42,9 @@ const PORT = process.env.PORT || 5000;
 
 // CORS Configuration
 const corsOptions = {
-  origin: "https://appointment-scheduler-drab.vercel.app",
+  origin: process.env.NODE_ENV === 'production'
+    ? ['https://appointment-scheduler-d04b5avyp-anurags-projects-cdaddaeb.vercel.app', process.env.CLIENT_URL].filter(Boolean)
+    : 'http://localhost:3000',
   methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
   credentials: true,
   optionsSuccessStatus: 204

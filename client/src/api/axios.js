@@ -1,7 +1,9 @@
 import axios from 'axios';
 
 const api = axios.create({
-  baseURL: "https://appointment-scheduler-ah4f.onrender.com/api",
+  baseURL: process.env.NODE_ENV === 'production' 
+    ? 'https://appointment-scheduler-ah4f.onrender.com/api' 
+    : (process.env.REACT_APP_API_URL || 'http://localhost:5000'),
   headers: {
     'Content-Type': 'application/json'
   },
