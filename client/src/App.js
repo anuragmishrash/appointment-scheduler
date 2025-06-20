@@ -64,7 +64,9 @@ const App = () => {
 
   return (
     <>
+      {/* Empty Navbar component */}
       <Navbar />
+      {/* Empty AppNotification component */}
       {user && <AppNotification appointments={appointments} />}
       <div className="container">
         <Routes>
@@ -161,6 +163,7 @@ const App = () => {
           <Route path="*" element={<NotFound />} />
         </Routes>
       </div>
+      {/* Empty Footer component */}
       <Footer />
     </>
   );
