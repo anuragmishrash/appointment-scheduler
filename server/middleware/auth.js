@@ -5,6 +5,12 @@ const User = require('../models/User');
 const protect = async (req, res, next) => {
   let token;
 
+  // Check for JWT_SECRET
+  if (!process.env.JWT_SECRET) {
+    console.error('CRITICAL ERROR: JWT_SECRET environment variable is not set!');
+    return res.status(500).json({ message: 'Server configuration error' });
+  }
+
   // Check if token exists in headers
   if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
     try {
@@ -24,8 +30,32 @@ const protect = async (req, res, next) => {
 
       next();
     } catch (error) {
-      console.error(error);
-      return res.status(401).json({ message: 'Not authorized, token failed' });
+      console.error('Auth middleware error:', error.name, '-', error.message);
+      
+      // Handle specific JWT errors
+      if (error.name === 'JsonWebTokenError') {
+        if (error.message === 'invalid signature') {
+          return res.status(401).json({ 
+            message: 'Authentication failed: Token signature invalid',
+            action: 'logout'
+          });
+        } else if (error.message === 'jwt malformed') {
+          return res.status(401).json({ 
+            message: 'Authentication failed: Invalid token format',
+            action: 'logout'
+          });
+        }
+      } else if (error.name === 'TokenExpiredError') {
+        return res.status(401).json({ 
+          message: 'Authentication failed: Token has expired',
+          action: 'logout'
+        });
+      }
+      
+      return res.status(401).json({ 
+        message: 'Not authorized, token validation failed',
+        action: 'logout'
+      });
     }
   }
 

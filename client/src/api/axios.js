@@ -35,17 +35,31 @@ api.interceptors.request.use(
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    // Handle 401 Unauthorized errors (token expired)
-    if (error.response && error.response.status === 401) {
-      localStorage.removeItem('token');
-      window.location.href = '/login';
+    // Handle authentication errors
+    if (error.response) {
+      // Check for token-related errors
+      if (error.response.status === 401) {
+        const errorData = error.response.data;
+        
+        // Check if we should force logout
+        if (errorData.action === 'logout') {
+          console.log('Forcing logout due to token issue:', errorData.message);
+          localStorage.removeItem('token');
+          localStorage.removeItem('userId');
+          window.location.href = '/login';
+        }
+      }
+      
+      // Log detailed error information
+      console.error('Response error:', {
+        status: error.response.status,
+        data: error.response.data,
+        headers: error.response.headers
+      });
+    } else {
+      // Network errors or other issues without a response
+      console.error('Network error:', error.message);
     }
-    // Log detailed error information
-    console.error('Response error:', error.response ? {
-      status: error.response.status,
-      data: error.response.data,
-      headers: error.response.headers
-    } : error.message);
     
     return Promise.reject(error);
   }
