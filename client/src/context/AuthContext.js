@@ -45,8 +45,27 @@ export const AuthProvider = ({ children }) => {
   // Register user
   const register = async (userData) => {
     try {
-      const res = await api.post('/api/auth/register', userData);
+      // Ensure the required fields are present and not undefined
+      if (!userData.name || !userData.email || !userData.password) {
+        toast.error('Name, email and password are required fields');
+        return false;
+      }
+
+      console.log('Attempting to register with data:', JSON.stringify({
+        name: userData.name,
+        email: userData.email,
+        password: '******',
+        role: userData.role
+      }));
       
+      // Add /api prefix for production environment
+      const endpoint = process.env.NODE_ENV === 'production' 
+        ? '/api/auth/register' 
+        : '/api/auth/register';
+        
+      const res = await api.post(endpoint, userData);
+      
+      console.log('Registration successful, setting user data');
       setToken(res.data.token);
       setUser(res.data);
       localStorage.setItem('token', res.data.token);
@@ -55,6 +74,7 @@ export const AuthProvider = ({ children }) => {
       toast.success('Registration successful!');
       return true;
     } catch (error) {
+      console.error('Registration error details:', error);
       const message = error.response?.data?.message || 'Registration failed';
       toast.error(message);
       return false;

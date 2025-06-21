@@ -83,26 +83,34 @@ const Register = () => {
     }
     
     setLoading(true);
+    setError('');
     
     try {
-      // Prepare registration data
+      // Prepare registration data - ensure all required fields are explicitly set
       const userData = {
-        name,
-        email,
+        name: name.trim(),
+        email: email.trim(),
         password,
-        role,
-        phone: phone || undefined,
-        address: address || undefined
+        role: role || 'user',
       };
+      
+      // Only add fields if they have values
+      if (phone && phone.trim() !== '') userData.phone = phone.trim();
+      if (address && address.trim() !== '') userData.address = address.trim();
       
       // Add business details if registering as a business
       if (role === 'business') {
         userData.businessDetails = {
-          businessName,
-          description: businessDescription,
-          category: businessCategory
+          businessName: businessName.trim(),
+          description: businessDescription?.trim() || '',
+          category: businessCategory.trim()
         };
       }
+      
+      console.log('Submitting registration with data:', {
+        ...userData,
+        password: '[REDACTED]'
+      });
       
       const success = await register(userData);
       if (success) {
@@ -111,9 +119,12 @@ const Register = () => {
         } else {
           navigate('/dashboard');
         }
+      } else {
+        setError('Registration failed. Please check your information and try again.');
       }
     } catch (error) {
-      setError('Registration failed. Please try again.');
+      console.error('Error during registration:', error);
+      setError('Registration failed. Please try again later.');
     } finally {
       setLoading(false);
     }

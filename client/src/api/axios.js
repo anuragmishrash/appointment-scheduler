@@ -1,9 +1,15 @@
 import axios from 'axios';
 
+// Determine the base URL based on environment
+const getBaseURL = () => {
+  if (process.env.NODE_ENV === 'production') {
+    return 'https://appointment-scheduler-ah4f.onrender.com';
+  }
+  return process.env.REACT_APP_API_URL || 'http://localhost:5000';
+};
+
 const api = axios.create({
-  baseURL: process.env.NODE_ENV === 'production' 
-    ? 'https://appointment-scheduler-ah4f.onrender.com/api' 
-    : (process.env.REACT_APP_API_URL || 'http://localhost:5000'),
+  baseURL: getBaseURL(),
   headers: {
     'Content-Type': 'application/json'
   },
@@ -19,7 +25,10 @@ api.interceptors.request.use(
     }
     return config;
   },
-  (error) => Promise.reject(error)
+  (error) => {
+    console.error('Request error:', error);
+    return Promise.reject(error);
+  }
 );
 
 // Add a response interceptor to handle token expiration
@@ -31,6 +40,13 @@ api.interceptors.response.use(
       localStorage.removeItem('token');
       window.location.href = '/login';
     }
+    // Log detailed error information
+    console.error('Response error:', error.response ? {
+      status: error.response.status,
+      data: error.response.data,
+      headers: error.response.headers
+    } : error.message);
+    
     return Promise.reject(error);
   }
 );

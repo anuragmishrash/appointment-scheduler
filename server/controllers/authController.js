@@ -13,7 +13,21 @@ const generateToken = (id) => {
 // @access  Public
 const registerUser = async (req, res) => {
   try {
+    console.log('Register request body:', JSON.stringify(req.body));
+    
     const { name, email, password, role, phone, address, businessDetails } = req.body;
+
+    // Validate required fields
+    if (!name || !email || !password) {
+      return res.status(400).json({ 
+        message: 'Missing required fields', 
+        details: {
+          name: name ? 'provided' : 'missing',
+          email: email ? 'provided' : 'missing',
+          password: password ? 'provided' : 'missing'
+        }
+      });
+    }
 
     // Check if user already exists
     const userExists = await User.findOne({ email });
@@ -35,6 +49,12 @@ const registerUser = async (req, res) => {
     if (phone) userData.phone = phone;
     if (address) userData.address = address;
     if (businessDetails && role === 'business') userData.businessDetails = businessDetails;
+
+    console.log('Creating user with data:', {
+      name: userData.name,
+      email: userData.email,
+      role: userData.role
+    });
 
     const user = await User.create(userData);
 
