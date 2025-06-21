@@ -3,9 +3,19 @@ const User = require('../models/User');
 
 // Generate JWT token
 const generateToken = (id) => {
-  return jwt.sign({ id }, process.env.JWT_SECRET, {
-    expiresIn: '30d',
-  });
+  if (!process.env.JWT_SECRET) {
+    console.error('ERROR: JWT_SECRET environment variable is not set!');
+    throw new Error('Server configuration error: JWT_SECRET is not set');
+  }
+  
+  try {
+    return jwt.sign({ id }, process.env.JWT_SECRET, {
+      expiresIn: '30d',
+    });
+  } catch (error) {
+    console.error('JWT token generation error:', error);
+    throw new Error('Failed to generate authentication token');
+  }
 };
 
 // @desc    Register a new user
@@ -94,16 +104,33 @@ const registerUser = async (req, res) => {
         });
       }
       
-      res.status(201).json({
-        _id: user._id,
-        name: user.name,
-        email: user.email,
-        role: user.role,
-        phone: user.phone,
-        address: user.address,
-        businessDetails: user.businessDetails,
-        token: generateToken(user._id),
-      });
+      try {
+        const token = generateToken(user._id);
+        
+        res.status(201).json({
+          _id: user._id,
+          name: user.name,
+          email: user.email,
+          role: user.role,
+          phone: user.phone,
+          address: user.address,
+          businessDetails: user.businessDetails,
+          token: token,
+        });
+      } catch (tokenError) {
+        console.error('Token generation error during registration:', tokenError);
+        // User was created but token generation failed
+        res.status(201).json({
+          _id: user._id,
+          name: user.name,
+          email: user.email,
+          role: user.role,
+          phone: user.phone,
+          address: user.address,
+          businessDetails: user.businessDetails,
+          error: 'Authentication token could not be generated. Please log in again.'
+        });
+      }
     } else {
       res.status(400).json({ message: 'Invalid user data' });
     }
@@ -125,18 +152,28 @@ const loginUser = async (req, res) => {
 
     // Check if user exists and password matches
     if (user && (await user.comparePassword(password))) {
-      res.json({
-        _id: user._id,
-        name: user.name,
-        email: user.email,
-        role: user.role,
-        token: generateToken(user._id),
-      });
+      try {
+        const token = generateToken(user._id);
+        
+        res.json({
+          _id: user._id,
+          name: user.name,
+          email: user.email,
+          role: user.role,
+          token: token,
+        });
+      } catch (tokenError) {
+        console.error('Token generation error during login:', tokenError);
+        res.status(500).json({ 
+          message: 'Authentication error: Could not generate token',
+          details: process.env.NODE_ENV === 'development' ? tokenError.message : undefined
+        });
+      }
     } else {
       res.status(401).json({ message: 'Invalid email or password' });
     }
   } catch (error) {
-    console.error(error);
+    console.error('Login error:', error);
     res.status(500).json({ message: 'Server error' });
   }
 };

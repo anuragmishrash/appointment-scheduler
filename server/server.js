@@ -44,6 +44,7 @@ const PORT = process.env.PORT || 5000;
 const allowedOrigins = [
   'https://appointment-scheduler-d04b5avyp-anurags-projects-cdaddaeb.vercel.app',
   'https://appointment-scheduler-client.vercel.app',
+  'https://appointment-scheduler-drab.vercel.app',
   'http://localhost:3000'
 ];
 
