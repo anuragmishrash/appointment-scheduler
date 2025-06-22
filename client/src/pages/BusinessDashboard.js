@@ -20,11 +20,13 @@ import {
   TableContainer,
   TableHead,
   TableRow,
-  Paper
+  Paper,
+  Alert
 } from '@mui/material';
 import { toast } from 'react-toastify';
 import AddIcon from '@mui/icons-material/Add';
 import SettingsIcon from '@mui/icons-material/Settings';
+import EventIcon from '@mui/icons-material/Event';
 
 const BusinessDashboard = () => {
   const { user } = useAuth();
@@ -119,6 +121,9 @@ const BusinessDashboard = () => {
   const cancelledAppointments = appointments.filter(
     appointment => appointment.status === 'cancelled'
   );
+  const completedAppointments = appointments.filter(
+    appointment => appointment.status === 'completed'
+  );
 
   // Get displayed appointments based on selected tab
   const getDisplayedAppointments = () => {
@@ -126,6 +131,7 @@ const BusinessDashboard = () => {
       case 0: return allAppointments;
       case 1: return scheduledAppointments;
       case 2: return cancelledAppointments;
+      case 3: return completedAppointments;
       default: return allAppointments;
     }
   };
@@ -146,7 +152,7 @@ const BusinessDashboard = () => {
             Business Dashboard
           </Typography>
           <Typography variant="subtitle1" color="text.secondary">
-            {user?.name}
+            {user?.businessDetails?.businessName || user?.name}
           </Typography>
         </Box>
         <Box>
@@ -154,7 +160,7 @@ const BusinessDashboard = () => {
             variant="outlined"
             startIcon={<SettingsIcon />}
             component={RouterLink}
-            to="/business/availability"
+            to="/availability"
             sx={{ mr: 1 }}
           >
             Manage Availability
@@ -163,7 +169,7 @@ const BusinessDashboard = () => {
             variant="contained"
             startIcon={<AddIcon />}
             component={RouterLink}
-            to="/business/services/new"
+            to="/services/new"
           >
             Add Service
           </Button>
@@ -184,9 +190,20 @@ const BusinessDashboard = () => {
       {/* Appointments Tab */}
       {tabValue === 0 && (
         <>
-          <Typography variant="h6" sx={{ mb: 2 }}>
-            Appointments
-          </Typography>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+            <Typography variant="h6">
+              Appointments
+            </Typography>
+            <Button
+              variant="outlined"
+              component={RouterLink}
+              to="/business/booking-dashboard"
+              startIcon={<EventIcon />}
+              size="small"
+            >
+              View My Bookings
+            </Button>
+          </Box>
           
           <Tabs 
             value={appointmentTabValue} 
@@ -197,16 +214,13 @@ const BusinessDashboard = () => {
             <Tab label={`All (${allAppointments.length})`} />
             <Tab label={`Scheduled (${scheduledAppointments.length})`} />
             <Tab label={`Cancelled (${cancelledAppointments.length})`} />
+            <Tab label={`Completed (${completedAppointments.length})`} />
           </Tabs>
           
           {getDisplayedAppointments().length === 0 ? (
-            <Card sx={{ mb: 4, p: 2 }}>
-              <CardContent>
-                <Typography variant="body1" align="center">
-                  No appointments found.
-                </Typography>
-              </CardContent>
-            </Card>
+            <Alert severity="info" sx={{ mb: 4 }}>
+              No appointments found in this category.
+            </Alert>
           ) : (
             <TableContainer component={Paper} sx={{ mb: 4 }}>
               <Table>
@@ -283,7 +297,7 @@ const BusinessDashboard = () => {
               variant="contained"
               startIcon={<AddIcon />}
               component={RouterLink}
-              to="/business/services/new"
+              to="/services/new"
               size="small"
             >
               Add New Service
@@ -300,7 +314,7 @@ const BusinessDashboard = () => {
                   <Button
                     variant="contained"
                     component={RouterLink}
-                    to="/business/services/new"
+                    to="/services/new"
                     startIcon={<AddIcon />}
                   >
                     Add Your First Service
@@ -333,7 +347,7 @@ const BusinessDashboard = () => {
                       <Button
                         size="small"
                         component={RouterLink}
-                        to={`/business/services/${service._id}`}
+                        to={`/services/edit/${service._id}`}
                       >
                         Edit
                       </Button>

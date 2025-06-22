@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Link as RouterLink, Navigate } from 'react-router-dom';
+import { Link as RouterLink } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import api from '../api/axios';
 import notificationService from '../services/NotificationService';
@@ -47,7 +47,7 @@ function TabPanel(props) {
   );
 }
 
-const Dashboard = () => {
+const BusinessBookingDashboard = () => {
   const { user } = useAuth();
   const [appointments, setAppointments] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -59,8 +59,15 @@ const Dashboard = () => {
     const fetchAppointments = async () => {
       try {
         const res = await api.get('/api/appointments');
-        // For regular users, just show all their appointments
-        setAppointments(res.data);
+        // For business users, only show appointments where they are the customer, not the provider
+        if (user && user.role === 'business') {
+          // Filter out appointments where the user is the business (provider)
+          // Only show appointments where they are the customer
+          const customerAppointments = res.data.filter(
+            appointment => !appointment.isBusinessAppointment
+          );
+          setAppointments(customerAppointments);
+        }
         
         // Schedule notifications for upcoming appointments
         if (res.data && res.data.length > 0) {
@@ -216,11 +223,6 @@ const Dashboard = () => {
   const scheduledAppointments = appointments.filter(appointment => appointment.status === 'scheduled');
   const cancelledAppointments = appointments.filter(appointment => appointment.status === 'cancelled');
 
-  // Redirect business users to the business dashboard
-  if (user && user.role === 'business') {
-    return <Navigate to="/business/booking-dashboard" />;
-  }
-
   if (loading) {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4 }}>
@@ -255,7 +257,7 @@ const Dashboard = () => {
 
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 4 }}>
         <Typography variant="h4" component="h1">
-          My Dashboard
+          My Bookings
         </Typography>
         <Box>
           <Button
@@ -360,4 +362,4 @@ const Dashboard = () => {
   );
 };
 
-export default Dashboard; 
+export default BusinessBookingDashboard; 

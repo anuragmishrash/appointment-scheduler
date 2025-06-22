@@ -4,18 +4,20 @@ import { BrowserRouter as Router } from 'react-router-dom';
 import App from './App';
 import './index.css';
 import { AuthProvider } from './context/AuthContext';
-import { ToastContainer } from 'react-toastify';
-import 'react-toastify/dist/ReactToastify.css';
+import { ThemeProvider } from './theme/ThemeContext';
+import { CustomToast } from './components/common/CustomToast';
 
 const root = createRoot(document.getElementById('root'));
 
 root.render(
   <React.StrictMode>
     <Router>
-      <AuthProvider>
-        <App />
-        <ToastContainer position="top-right" autoClose={3000} />
-      </AuthProvider>
+      <ThemeProvider>
+        <AuthProvider>
+          <App />
+          <CustomToast />
+        </AuthProvider>
+      </ThemeProvider>
     </Router>
   </React.StrictMode>
 ); 
