@@ -284,13 +284,22 @@ const AppointmentForm = () => {
                   label="Select Time Slot"
                   onChange={handleChange}
                 >
-                  {timeSlots.map((slot, index) => (
+                  {timeSlots.length > 0 ? (
+                    timeSlots.map((slot, index) => (
                     <MenuItem key={index} value={slot.startTime}>
                       {slot.startTime} - {slot.endTime}
+                      </MenuItem>
+                    ))
+                  ) : (
+                    <MenuItem disabled value="">
+                      No available time slots for this date
                     </MenuItem>
-                  ))}
+                  )}
                 </Select>
                 {errors.timeSlot && <FormHelperText>{errors.timeSlot}</FormHelperText>}
+                {!loadingTimeSlots && timeSlots.length === 0 && (
+                  <FormHelperText error>No available time slots for this date. Please select another date.</FormHelperText>
+                )}
               </FormControl>
             </Grid>
             

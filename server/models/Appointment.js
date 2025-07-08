@@ -30,7 +30,7 @@ const AppointmentSchema = new mongoose.Schema({
   },
   status: {
     type: String,
-    enum: ['scheduled', 'completed', 'cancelled', 'rescheduled'],
+    enum: ['scheduled', 'completed', 'cancelled', 'rescheduled', 'missed'],
     default: 'scheduled'
   },
   notes: {
@@ -40,10 +40,28 @@ const AppointmentSchema = new mongoose.Schema({
     type: Boolean,
     default: false
   },
+  reminderSent: {
+    type: Boolean,
+    default: false
+  },
   createdAt: {
     type: Date,
     default: Date.now
+  },
+  updatedAt: {
+    type: Date,
+    default: Date.now
+  },
+  autoCancelled: {
+    type: Boolean,
+    default: false
   }
+});
+
+// Add pre-save middleware to update the updatedAt timestamp
+AppointmentSchema.pre('save', function(next) {
+  this.updatedAt = Date.now();
+  next();
 });
 
 module.exports = mongoose.model('Appointment', AppointmentSchema); 

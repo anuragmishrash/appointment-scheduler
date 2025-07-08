@@ -72,6 +72,12 @@ const getAvailableTimeSlots = async (req, res) => {
     const requestedDate = new Date(date);
     const dayOfWeek = requestedDate.getDay();
     
+    // Get current date and time
+    const currentDate = new Date();
+    const isToday = requestedDate.toDateString() === currentDate.toDateString();
+    const currentHour = currentDate.getHours();
+    const currentMinute = currentDate.getMinutes();
+    
     console.log(`Finding availability for businessId: ${businessId}, date: ${date}, dayOfWeek: ${dayOfWeek}`);
     
     // Get business availability for this day
@@ -145,7 +151,13 @@ const getAvailableTimeSlots = async (req, res) => {
           appointment.startTime === startTimeStr
         );
         
-        if (!isBooked) {
+        // Skip this slot if it's in the past for today
+        const isPastTimeSlot = isToday && (
+          startHour < currentHour || 
+          (startHour === currentHour && startMinute <= currentMinute)
+        );
+        
+        if (!isBooked && !isPastTimeSlot) {
           timeSlots.push({
             startTime: startTimeStr,
             endTime: endTimeStr

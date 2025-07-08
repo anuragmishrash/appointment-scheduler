@@ -152,6 +152,8 @@ const BusinessBookingDashboard = () => {
         return 'error';
       case 'rescheduled':
         return 'warning';
+      case 'missed':
+        return 'secondary';
       default:
         return 'default';
     }
@@ -222,6 +224,7 @@ const BusinessBookingDashboard = () => {
   // Filter appointments by status
   const scheduledAppointments = appointments.filter(appointment => appointment.status === 'scheduled');
   const cancelledAppointments = appointments.filter(appointment => appointment.status === 'cancelled');
+  const missedAppointments = appointments.filter(appointment => appointment.status === 'missed');
 
   if (loading) {
     return (
@@ -322,9 +325,10 @@ const BusinessBookingDashboard = () => {
             aria-label="appointment tabs"
             sx={{ borderBottom: 1, borderColor: 'divider' }}
           >
-            <Tab label={`All Appointments (${appointments.length})`} />
-            <Tab label={`Scheduled (${scheduledAppointments.length})`} />
-            <Tab label={`Cancelled (${cancelledAppointments.length})`} />
+            <Tab label={`ALL APPOINTMENTS (${appointments.length})`} />
+            <Tab label={`SCHEDULED (${scheduledAppointments.length})`} />
+            <Tab label={`CANCELLED (${cancelledAppointments.length})`} />
+            <Tab label={`MISSED (${missedAppointments.length})`} />
           </Tabs>
 
           <TabPanel value={tabValue} index={0}>
@@ -353,6 +357,18 @@ const BusinessBookingDashboard = () => {
             ) : (
               <Grid container spacing={3}>
                 {cancelledAppointments.map(renderAppointmentCard)}
+              </Grid>
+            )}
+          </TabPanel>
+
+          <TabPanel value={tabValue} index={3}>
+            {missedAppointments.length === 0 ? (
+              <Typography variant="body1" align="center" sx={{ py: 4 }}>
+                You don't have any missed appointments.
+              </Typography>
+            ) : (
+              <Grid container spacing={3}>
+                {missedAppointments.map(renderAppointmentCard)}
               </Grid>
             )}
           </TabPanel>

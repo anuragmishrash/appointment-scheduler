@@ -21,12 +21,20 @@ import {
   TableHead,
   TableRow,
   Paper,
-  Alert
+  Alert,
+  IconButton,
+  Badge,
+  Popover,
+  List,
+  ListItem,
+  ListItemText,
+  Divider
 } from '@mui/material';
 import { toast } from 'react-toastify';
 import AddIcon from '@mui/icons-material/Add';
 import SettingsIcon from '@mui/icons-material/Settings';
 import EventIcon from '@mui/icons-material/Event';
+import NotificationsIcon from '@mui/icons-material/Notifications';
 
 const BusinessDashboard = () => {
   const { user } = useAuth();
@@ -36,6 +44,22 @@ const BusinessDashboard = () => {
   const [error, setError] = useState('');
   const [tabValue, setTabValue] = useState(0);
   const [appointmentTabValue, setAppointmentTabValue] = useState(0);
+  const [notifications, setNotifications] = useState([]);
+  const [anchorEl, setAnchorEl] = useState(null);
+  const [unreadCount, setUnreadCount] = useState(0);
+  
+  // For notifications popover
+  const handleNotificationClick = (event) => {
+    setAnchorEl(event.currentTarget);
+  };
+
+  const handleNotificationClose = () => {
+    setAnchorEl(null);
+    // Mark all as read when closing
+    setUnreadCount(0);
+  };
+
+  const openNotifications = Boolean(anchorEl);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -53,6 +77,57 @@ const BusinessDashboard = () => {
         // Fetch services
         const servicesRes = await api.get(`/api/services/business/${user._id}`);
         setServices(servicesRes.data);
+        
+        // Generate notifications
+        const now = new Date();
+        const newNotifications = [];
+        let unread = 0;
+        
+        // Check for scheduled appointments coming up soon (within 30 mins)
+        businessAppointments.forEach(appointment => {
+          if (appointment.status === 'scheduled') {
+            const apptDate = new Date(appointment.date);
+            const [hours, minutes] = appointment.startTime.split(':').map(Number);
+            const apptTime = new Date(apptDate);
+            apptTime.setHours(hours, minutes);
+            
+            const diffMinutes = Math.floor((apptTime - now) / (1000 * 60));
+            
+            if (diffMinutes >= 0 && diffMinutes <= 30) {
+              newNotifications.push({
+                id: `upcoming-${appointment._id}`,
+                type: 'upcoming',
+                message: `Upcoming appointment with ${appointment.user.name} at ${appointment.startTime}`,
+                appointmentId: appointment._id,
+                time: new Date()
+              });
+              unread++;
+            }
+          }
+          
+          // Check for missed appointments (in the last 24 hours)
+          if (appointment.status === 'missed') {
+            const updatedAt = appointment.updatedAt ? new Date(appointment.updatedAt) : new Date(appointment.createdAt);
+            const oneDayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+            
+            if (updatedAt >= oneDayAgo) {
+              newNotifications.push({
+                id: `missed-${appointment._id}`,
+                type: 'missed',
+                message: `${appointment.user.name} missed their appointment at ${appointment.startTime}`,
+                appointmentId: appointment._id,
+                time: updatedAt
+              });
+              unread++;
+            }
+          }
+        });
+        
+        // Sort notifications by time (newest first)
+        newNotifications.sort((a, b) => b.time - a.time);
+        setNotifications(newNotifications);
+        setUnreadCount(unread);
+        
       } catch (error) {
         console.error('Error fetching data:', error);
         setError('Failed to load data');
@@ -62,6 +137,11 @@ const BusinessDashboard = () => {
     };
 
     fetchData();
+    
+    // Refresh data every minute
+    const intervalId = setInterval(fetchData, 60000);
+    
+    return () => clearInterval(intervalId);
   }, [user._id]);
 
   const handleTabChange = (event, newValue) => {
@@ -102,6 +182,8 @@ const BusinessDashboard = () => {
         return 'error';
       case 'rescheduled':
         return 'warning';
+      case 'missed':
+        return 'secondary';
       default:
         return 'default';
     }
@@ -124,6 +206,9 @@ const BusinessDashboard = () => {
   const completedAppointments = appointments.filter(
     appointment => appointment.status === 'completed'
   );
+  const missedAppointments = appointments.filter(
+    appointment => appointment.status === 'missed'
+  );
 
   // Get displayed appointments based on selected tab
   const getDisplayedAppointments = () => {
@@ -132,6 +217,7 @@ const BusinessDashboard = () => {
       case 1: return scheduledAppointments;
       case 2: return cancelledAppointments;
       case 3: return completedAppointments;
+      case 4: return missedAppointments;
       default: return allAppointments;
     }
   };
@@ -155,7 +241,17 @@ const BusinessDashboard = () => {
             {user?.businessDetails?.businessName || user?.name}
           </Typography>
         </Box>
-        <Box>
+        <Box sx={{ display: 'flex', alignItems: 'center' }}>
+          <IconButton 
+            color="primary" 
+            onClick={handleNotificationClick} 
+            sx={{ mr: 2 }}
+            aria-label="notifications"
+          >
+            <Badge badgeContent={unreadCount} color="error">
+              <NotificationsIcon />
+            </Badge>
+          </IconButton>
           <Button
             variant="outlined"
             startIcon={<SettingsIcon />}
@@ -175,6 +271,50 @@ const BusinessDashboard = () => {
           </Button>
         </Box>
       </Box>
+      
+      {/* Notifications Popover */}
+      <Popover
+        open={openNotifications}
+        anchorEl={anchorEl}
+        onClose={handleNotificationClose}
+        anchorOrigin={{
+          vertical: 'bottom',
+          horizontal: 'right',
+        }}
+        transformOrigin={{
+          vertical: 'top',
+          horizontal: 'right',
+        }}
+      >
+        <Box sx={{ width: 320, maxHeight: 400, overflow: 'auto' }}>
+          <List>
+            {notifications.length === 0 ? (
+              <ListItem>
+                <ListItemText primary="No notifications" />
+              </ListItem>
+            ) : (
+              notifications.map((notification) => (
+                <React.Fragment key={notification.id}>
+                  <ListItem
+                    button
+                    component={notification.appointmentId ? RouterLink : 'div'}
+                    to={notification.appointmentId ? `/appointments/${notification.appointmentId}` : undefined}
+                  >
+                    <ListItemText 
+                      primary={notification.message} 
+                      secondary={notification.time.toLocaleString()}
+                      primaryTypographyProps={{
+                        color: notification.type === 'missed' ? 'error' : 'primary'
+                      }}
+                    />
+                  </ListItem>
+                  <Divider />
+                </React.Fragment>
+              ))
+            )}
+          </List>
+        </Box>
+      </Popover>
 
       <Tabs value={tabValue} onChange={handleTabChange} sx={{ mb: 3 }}>
         <Tab label="Appointments" />
@@ -215,6 +355,7 @@ const BusinessDashboard = () => {
             <Tab label={`Scheduled (${scheduledAppointments.length})`} />
             <Tab label={`Cancelled (${cancelledAppointments.length})`} />
             <Tab label={`Completed (${completedAppointments.length})`} />
+            <Tab label={`Missed (${missedAppointments.length})`} />
           </Tabs>
           
           {getDisplayedAppointments().length === 0 ? (
@@ -236,7 +377,12 @@ const BusinessDashboard = () => {
                 </TableHead>
                 <TableBody>
                   {getDisplayedAppointments().map((appointment) => (
-                    <TableRow key={appointment._id}>
+                    <TableRow 
+                      key={appointment._id} 
+                      hover
+                      onClick={() => window.location.href = `/appointments/${appointment._id}`}
+                      sx={{ cursor: 'pointer' }}
+                    >
                       <TableCell>{appointment.user?.name || 'Customer'}</TableCell>
                       <TableCell>{appointment.service?.name || 'Service'}</TableCell>
                       <TableCell>{formatDate(appointment.date)}</TableCell>
@@ -248,14 +394,17 @@ const BusinessDashboard = () => {
                           size="small"
                         />
                       </TableCell>
-                      <TableCell>
+                      <TableCell onClick={(e) => e.stopPropagation()}>
                         {appointment.status === 'scheduled' && (
                           <>
                             <Button
                               size="small"
                               variant="contained"
                               color="success"
-                              onClick={() => handleUpdateAppointmentStatus(appointment._id, 'completed')}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleUpdateAppointmentStatus(appointment._id, 'completed');
+                              }}
                               sx={{ mr: 1 }}
                             >
                               Complete
@@ -264,7 +413,10 @@ const BusinessDashboard = () => {
                               size="small"
                               variant="contained"
                               color="error"
-                              onClick={() => handleUpdateAppointmentStatus(appointment._id, 'cancelled')}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleUpdateAppointmentStatus(appointment._id, 'cancelled');
+                              }}
                             >
                               Cancel
                             </Button>
@@ -275,6 +427,9 @@ const BusinessDashboard = () => {
                         )}
                         {appointment.status === 'cancelled' && (
                           <Chip label="Cancelled" color="error" size="small" />
+                        )}
+                        {appointment.status === 'missed' && (
+                          <Chip label="Missed" color="secondary" size="small" />
                         )}
                       </TableCell>
                     </TableRow>

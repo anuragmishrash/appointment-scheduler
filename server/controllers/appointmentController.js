@@ -476,10 +476,61 @@ const cancelAppointment = async (req, res) => {
   }
 };
 
+// @desc    Restore incorrectly auto-cancelled future appointments
+// @route   POST /api/appointments/restore-future
+// @access  Private/Admin
+const restoreFutureAppointments = async (req, res) => {
+  try {
+    const now = new Date();
+    
+    // Find future appointments that were auto-marked as missed
+    const futureMissedAppointments = await Appointment.find({
+      $and: [
+        // Either date is in the future
+        { 
+          date: { $gt: now }
+        },
+        // Or date is today but time is in the future
+        {
+          date: {
+            $gte: new Date(now.getFullYear(), now.getMonth(), now.getDate()),
+            $lt: new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1)
+          },
+          startTime: { 
+            $gte: `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}` 
+          }
+        },
+        // Was auto-marked as missed
+        { status: 'missed', autoCancelled: true }
+      ]
+    });
+    
+    console.log(`Found ${futureMissedAppointments.length} future appointments to restore`);
+    
+    // Restore each appointment
+    let restoredCount = 0;
+    for (const appointment of futureMissedAppointments) {
+      appointment.status = 'scheduled';
+      appointment.autoCancelled = false;
+      await appointment.save();
+      restoredCount++;
+    }
+    
+    res.json({ 
+      message: `Restored ${restoredCount} future appointments`, 
+      count: restoredCount
+    });
+  } catch (error) {
+    console.error('Error restoring appointments:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
 module.exports = {
   createAppointment,
   getAppointments,
   getAppointmentById,
   updateAppointment,
   cancelAppointment,
+  restoreFutureAppointments,
 };

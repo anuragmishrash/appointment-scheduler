@@ -48,6 +48,13 @@ const lightShadows = [
   '0px 6px 24px rgba(0, 0, 0, 0.12)',
   '0px 8px 32px rgba(0, 0, 0, 0.16)',
   '0px 10px 40px rgba(0, 0, 0, 0.2)',
+  '0px 12px 48px rgba(0, 0, 0, 0.24)',
+  '0px 14px 56px rgba(0, 0, 0, 0.28)',
+  '0px 16px 64px rgba(0, 0, 0, 0.32)',
+  '0px 18px 72px rgba(0, 0, 0, 0.36)',
+  '0px 20px 80px rgba(0, 0, 0, 0.4)',
+  '0px 22px 88px rgba(0, 0, 0, 0.44)',
+  '0px 24px 96px rgba(0, 0, 0, 0.48)',
 ];
 
 // Custom shadows for dark mode (more subtle)
@@ -58,6 +65,13 @@ const darkShadows = [
   '0px 6px 24px rgba(0, 0, 0, 0.45)',
   '0px 8px 32px rgba(0, 0, 0, 0.55)',
   '0px 10px 40px rgba(0, 0, 0, 0.65)',
+  '0px 12px 48px rgba(0, 0, 0, 0.75)',
+  '0px 14px 56px rgba(0, 0, 0, 0.8)',
+  '0px 16px 64px rgba(0, 0, 0, 0.85)',
+  '0px 18px 72px rgba(0, 0, 0, 0.9)',
+  '0px 20px 80px rgba(0, 0, 0, 0.95)',
+  '0px 22px 88px rgba(0, 0, 0, 0.97)',
+  '0px 24px 96px rgba(0, 0, 0, 1)',
 ];
 
 // Light mode theme

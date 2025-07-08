@@ -18,7 +18,13 @@ import {
   Snackbar,
   Tabs,
   Tab,
-  Paper
+  Paper,
+  IconButton,
+  Badge,
+  Popover,
+  List,
+  ListItem,
+  ListItemText
 } from '@mui/material';
 import { toast } from 'react-toastify';
 import AddIcon from '@mui/icons-material/Add';
@@ -54,6 +60,28 @@ const Dashboard = () => {
   const [error, setError] = useState('');
   const [showNotificationBanner, setShowNotificationBanner] = useState(false);
   const [tabValue, setTabValue] = useState(0);
+  const [autoCancelledAppointments, setAutoCancelledAppointments] = useState([]);
+  const [showAutoCancelledAlert, setShowAutoCancelledAlert] = useState(false);
+  const [missedAppointments, setMissedAppointments] = useState([]);
+  const [showMissedAlert, setShowMissedAlert] = useState(false);
+  const [upcomingAppointments, setUpcomingAppointments] = useState([]);
+  const [showUpcomingAlert, setShowUpcomingAlert] = useState(false);
+  const [anchorEl, setAnchorEl] = useState(null);
+  const [notifications, setNotifications] = useState([]);
+  const [unreadCount, setUnreadCount] = useState(0);
+
+  // For notifications popover
+  const handleNotificationClick = (event) => {
+    setAnchorEl(event.currentTarget);
+  };
+
+  const handleNotificationClose = () => {
+    setAnchorEl(null);
+    // Mark all as read when closing
+    setUnreadCount(0);
+  };
+
+  const openNotifications = Boolean(anchorEl);
 
   useEffect(() => {
     const fetchAppointments = async () => {
@@ -61,6 +89,109 @@ const Dashboard = () => {
         const res = await api.get('/api/appointments');
         // For regular users, just show all their appointments
         setAppointments(res.data);
+        
+        // Generate notifications
+        const now = new Date();
+        const newNotifications = [];
+        let unread = 0;
+        
+        // Check for recently auto-cancelled appointments
+        const oneDayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+        
+        const recentAutoCancelled = res.data.filter(app => {
+          // Check if the appointment was auto-cancelled
+          return app.status === 'cancelled' && app.autoCancelled === true;
+        });
+        
+        if (recentAutoCancelled.length > 0) {
+          setAutoCancelledAppointments(recentAutoCancelled);
+          setShowAutoCancelledAlert(true);
+          
+          // Add to notifications
+          recentAutoCancelled.forEach(app => {
+            newNotifications.push({
+              id: `auto-cancelled-${app._id}`,
+              type: 'auto-cancelled',
+              message: `Your appointment for ${formatDate(app.date)} at ${app.startTime} was auto-cancelled`,
+              appointmentId: app._id,
+              time: new Date(app.updatedAt || app.createdAt)
+            });
+            unread++;
+          });
+        }
+
+        // Check for missed appointments (in last 24 hours)
+        const recentMissed = res.data.filter(app => {
+          const updatedAt = app.updatedAt ? new Date(app.updatedAt) : new Date(app.createdAt);
+          return app.status === 'missed' && updatedAt >= oneDayAgo;
+        });
+
+        if (recentMissed.length > 0) {
+          setMissedAppointments(recentMissed);
+          setShowMissedAlert(true);
+          
+          // Add to notifications
+          recentMissed.forEach(app => {
+            newNotifications.push({
+              id: `missed-${app._id}`,
+              type: 'missed',
+              message: `Your appointment for ${formatDate(app.date)} at ${app.startTime} was marked as missed`,
+              appointmentId: app._id,
+              time: new Date(app.updatedAt || app.createdAt)
+            });
+            unread++;
+          });
+        }
+
+        // Check for upcoming appointments in next 10-30 minutes
+        const upcomingApptsWindow = res.data.filter(app => {
+          // Only look at scheduled appointments for today
+          if (app.status !== 'scheduled') return false;
+          
+          const apptDate = new Date(app.date);
+          // Check if it's today
+          if (apptDate.toDateString() !== now.toDateString()) return false;
+
+          // Parse the start time
+          const [hours, minutes] = app.startTime.split(':').map(Number);
+          const apptTime = new Date(apptDate);
+          apptTime.setHours(hours, minutes);
+          
+          // Calculate time difference in minutes
+          const diffMinutes = Math.floor((apptTime - now) / (1000 * 60));
+          
+          // Consider appointments between 10-30 minutes from now
+          return diffMinutes >= 0 && diffMinutes <= 30;
+        });
+
+        if (upcomingApptsWindow.length > 0) {
+          setUpcomingAppointments(upcomingApptsWindow);
+          setShowUpcomingAlert(true);
+          
+          // Add to notifications
+          upcomingApptsWindow.forEach(app => {
+            const [hours, minutes] = app.startTime.split(':').map(Number);
+            const apptTime = new Date(new Date(app.date));
+            apptTime.setHours(hours, minutes);
+            
+            // Calculate time difference in minutes
+            const diffMinutes = Math.floor((apptTime - now) / (1000 * 60));
+            
+            newNotifications.push({
+              id: `upcoming-${app._id}`,
+              type: 'upcoming',
+              message: `Upcoming appointment in ${diffMinutes} minutes at ${app.startTime}`,
+              appointmentId: app._id,
+              time: new Date()
+            });
+            unread++;
+          });
+        }
+        
+        // Sort notifications by time (newest first)
+        newNotifications.sort((a, b) => b.time - a.time);
+        setNotifications(newNotifications);
+        setUnreadCount(unread);
         
         // Schedule notifications for upcoming appointments
         if (res.data && res.data.length > 0) {
@@ -87,6 +218,16 @@ const Dashboard = () => {
       if (notificationService.hasSupport && notificationService.permission !== 'granted') {
         setShowNotificationBanner(true);
       }
+
+      // Set up a refresh interval to check for appointment status changes
+      const intervalId = setInterval(() => {
+        fetchAppointments();
+      }, 60000); // Refresh every minute
+
+      return () => {
+        clearInterval(intervalId);
+        notificationService.clearAllNotifications();
+      };
     }
     
     // Cleanup notifications when component unmounts
@@ -94,6 +235,39 @@ const Dashboard = () => {
       notificationService.clearAllNotifications();
     };
   }, [user]);
+
+  // Handle closing the auto-cancelled alert
+  const handleAutoCancelledAlertClose = () => {
+    setShowAutoCancelledAlert(false);
+  };
+
+  // Handle closing the missed appointment alert
+  const handleMissedAlertClose = () => {
+    setShowMissedAlert(false);
+  };
+
+  // Handle closing the upcoming appointment alert
+  const handleUpcomingAlertClose = () => {
+    setShowUpcomingAlert(false);
+  };
+
+  // Get status color for chips (add missed color)
+  const getStatusColor = (status) => {
+    switch (status) {
+      case 'scheduled':
+        return 'primary';
+      case 'completed':
+        return 'success';
+      case 'cancelled':
+        return 'error';
+      case 'rescheduled':
+        return 'warning';
+      case 'missed':
+        return 'secondary';
+      default:
+        return 'default';
+    }
+  };
 
   const handleCancelAppointment = async (id) => {
     try {
@@ -133,21 +307,6 @@ const Dashboard = () => {
 
   const handleTabChange = (event, newValue) => {
     setTabValue(newValue);
-  };
-
-  const getStatusColor = (status) => {
-    switch (status) {
-      case 'scheduled':
-        return 'primary';
-      case 'completed':
-        return 'success';
-      case 'cancelled':
-        return 'error';
-      case 'rescheduled':
-        return 'warning';
-      default:
-        return 'default';
-    }
   };
 
   const formatDate = (dateString) => {
@@ -215,6 +374,7 @@ const Dashboard = () => {
   // Filter appointments by status
   const scheduledAppointments = appointments.filter(appointment => appointment.status === 'scheduled');
   const cancelledAppointments = appointments.filter(appointment => appointment.status === 'cancelled');
+  // const missedAppointments = appointments.filter(appointment => appointment.status === 'missed');
 
   // Redirect business users to the business dashboard
   if (user && user.role === 'business') {
@@ -231,6 +391,7 @@ const Dashboard = () => {
 
   return (
     <Box>
+      {/* Notification permission banner */}
       <Snackbar
         open={showNotificationBanner}
         anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
@@ -253,11 +414,93 @@ const Dashboard = () => {
         </Alert>
       </Snackbar>
 
+      {/* Auto-cancelled appointments alert */}
+      <Snackbar
+        open={showAutoCancelledAlert}
+        anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
+        autoHideDuration={10000}
+        onClose={handleAutoCancelledAlertClose}
+      >
+        <Alert 
+          severity="warning" 
+          onClose={handleAutoCancelledAlertClose}
+          sx={{ width: '100%' }}
+        >
+          {autoCancelledAppointments.length === 1 ? (
+            <Typography variant="body2">
+              Your appointment for {formatDate(autoCancelledAppointments[0].date)} at {autoCancelledAppointments[0].startTime} has been automatically marked as missed as the time has passed.
+            </Typography>
+          ) : (
+            <Typography variant="body2">
+              {autoCancelledAppointments.length} appointments have been automatically marked as missed as their scheduled times have passed.
+            </Typography>
+          )}
+        </Alert>
+      </Snackbar>
+
+      {/* Missed appointments alert */}
+      <Snackbar
+        open={showMissedAlert}
+        anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
+        autoHideDuration={10000}
+        onClose={handleMissedAlertClose}
+      >
+        <Alert 
+          severity="error" 
+          onClose={handleMissedAlertClose}
+          sx={{ width: '100%' }}
+        >
+          {missedAppointments.length === 1 ? (
+            <Typography variant="body2">
+              Your appointment for {formatDate(missedAppointments[0].date)} at {missedAppointments[0].startTime} has been marked as missed.
+            </Typography>
+          ) : (
+            <Typography variant="body2">
+              {missedAppointments.length} appointments have been marked as missed.
+            </Typography>
+          )}
+        </Alert>
+      </Snackbar>
+
+      {/* Upcoming appointments reminder */}
+      <Snackbar
+        open={showUpcomingAlert}
+        anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
+        autoHideDuration={30000}
+        onClose={handleUpcomingAlertClose}
+      >
+        <Alert 
+          severity="info" 
+          onClose={handleUpcomingAlertClose}
+          sx={{ width: '100%' }}
+        >
+          {upcomingAppointments.length === 1 ? (
+            <Typography variant="body2">
+              Reminder: Your appointment for {formatDate(upcomingAppointments[0].date)} at {upcomingAppointments[0].startTime} is coming up soon.
+            </Typography>
+          ) : (
+            <Typography variant="body2">
+              Reminder: You have {upcomingAppointments.length} appointments coming up soon.
+            </Typography>
+          )}
+        </Alert>
+      </Snackbar>
+
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 4 }}>
         <Typography variant="h4" component="h1">
           My Dashboard
         </Typography>
-        <Box>
+        <Box sx={{ display: 'flex', alignItems: 'center' }}>
+          <IconButton 
+            color="primary" 
+            onClick={handleNotificationClick} 
+            sx={{ mr: 2 }}
+            aria-label="notifications"
+          >
+            <Badge badgeContent={unreadCount} color="error">
+              <NotificationsIcon />
+            </Badge>
+          </IconButton>
           <Button
             variant="contained"
             color="primary"
@@ -277,6 +520,57 @@ const Dashboard = () => {
           </Button>
         </Box>
       </Box>
+
+      {/* Notifications Popover */}
+      <Popover
+        open={openNotifications}
+        anchorEl={anchorEl}
+        onClose={handleNotificationClose}
+        anchorOrigin={{
+          vertical: 'bottom',
+          horizontal: 'right',
+        }}
+        transformOrigin={{
+          vertical: 'top',
+          horizontal: 'right',
+        }}
+      >
+        <Box sx={{ width: 320, maxHeight: 400, overflow: 'auto' }}>
+          <List>
+            {notifications.length === 0 ? (
+              <ListItem>
+                <ListItemText primary="No notifications" />
+              </ListItem>
+            ) : (
+              notifications.map((notification) => (
+                <ListItem
+                  key={notification.id}
+                  button
+                  component={notification.appointmentId ? RouterLink : 'div'}
+                  to={notification.appointmentId ? `/appointments/${notification.appointmentId}` : undefined}
+                  sx={{
+                    borderLeft: `4px solid ${
+                      notification.type === 'missed' ? '#f44336' : 
+                      notification.type === 'auto-cancelled' ? '#ff9800' : 
+                      notification.type === 'upcoming' ? '#2196f3' : 'transparent'
+                    }`,
+                  }}
+                >
+                  <ListItemText 
+                    primary={notification.message} 
+                    secondary={notification.time.toLocaleString()}
+                    primaryTypographyProps={{
+                      color: 
+                        notification.type === 'missed' ? 'error' :
+                        notification.type === 'auto-cancelled' ? 'warning' : 'primary'
+                    }}
+                  />
+                </ListItem>
+              ))
+            )}
+          </List>
+        </Box>
+      </Popover>
 
       <Typography variant="h6" sx={{ mb: 2 }}>
         Welcome back, {user?.name}!
@@ -320,9 +614,10 @@ const Dashboard = () => {
             aria-label="appointment tabs"
             sx={{ borderBottom: 1, borderColor: 'divider' }}
           >
-            <Tab label={`All Appointments (${appointments.length})`} />
-            <Tab label={`Scheduled (${scheduledAppointments.length})`} />
-            <Tab label={`Cancelled (${cancelledAppointments.length})`} />
+            <Tab label={`ALL APPOINTMENTS (${appointments.length})`} />
+            <Tab label={`SCHEDULED (${scheduledAppointments.length})`} />
+            <Tab label={`CANCELLED (${cancelledAppointments.length})`} />
+            <Tab label={`MISSED (${missedAppointments.length})`} />
           </Tabs>
 
           <TabPanel value={tabValue} index={0}>
@@ -351,6 +646,18 @@ const Dashboard = () => {
             ) : (
               <Grid container spacing={3}>
                 {cancelledAppointments.map(renderAppointmentCard)}
+              </Grid>
+            )}
+          </TabPanel>
+
+          <TabPanel value={tabValue} index={3}>
+            {missedAppointments.length === 0 ? (
+              <Typography variant="body1" align="center" sx={{ py: 4 }}>
+                You don't have any missed appointments.
+              </Typography>
+            ) : (
+              <Grid container spacing={3}>
+                {missedAppointments.map(renderAppointmentCard)}
               </Grid>
             )}
           </TabPanel>

@@ -4,6 +4,11 @@ const cors = require('cors');
 const dotenv = require('dotenv');
 const path = require('path');
 const connectDB = require('./config/db');
+const cron = require('node-cron');
+const Appointment = require('./models/Appointment');
+const User = require('./models/User');
+const Service = require('./models/Service');
+const nodemailer = require('nodemailer');
 
 // Load environment variables
 dotenv.config();
@@ -97,6 +102,514 @@ app.use('/api/users', userRoutes);
 app.get('/', (req, res) => {
   res.send('🚀 Appointment Scheduler Backend is Running!');
 });
+
+// Configure nodemailer for expired appointments
+const transporter = nodemailer.createTransport({
+  service: 'gmail',
+  auth: {
+    user: process.env.EMAIL_USER,
+    pass: process.env.EMAIL_PASS,
+  },
+});
+
+// Schedule job to check for expired appointments every hour
+cron.schedule('0 * * * *', async () => {
+  console.log('Running scheduled expired appointment check');
+  await checkForExpiredAppointments();
+});
+
+// Schedule job to check for missed appointments every 5 minutes
+// This will mark appointments as missed if they are 15+ minutes past the start time
+cron.schedule('*/5 * * * *', async () => {
+  console.log('Running missed appointment check');
+  await checkForMissedAppointments();
+});
+
+// Schedule job to send appointment reminders every 5 minutes
+// This will send reminders for appointments 10 minutes before they start
+cron.schedule('*/5 * * * *', async () => {
+  console.log('Checking for appointment reminders to send');
+  await sendAppointmentReminders();
+});
+
+// Also run once when server starts
+console.log('Running initial expired appointment check');
+checkForExpiredAppointments();
+
+// Also check for missed appointments on server start
+console.log('Running initial missed appointment check');
+checkForMissedAppointments();
+
+// Also send appointment reminders on server start
+console.log('Checking for initial appointment reminders');
+sendAppointmentReminders();
+
+// Restore any future appointments that were incorrectly cancelled
+console.log('Checking for incorrectly auto-cancelled future appointments');
+restoreIncorrectlyAutoCancel();
+
+// Function to restore incorrectly auto-cancelled future appointments
+async function restoreIncorrectlyAutoCancel() {
+  try {
+    const now = new Date();
+    
+    // Find future appointments that were auto-marked as missed
+    const futureMissedAppointments = await Appointment.find({
+      $or: [
+        // Either date is in the future
+        { 
+          date: { $gt: new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1) },
+          status: 'missed',
+          autoCancelled: true
+        },
+        // Or date is today but time is in the future
+        {
+          date: {
+            $gte: new Date(now.getFullYear(), now.getMonth(), now.getDate()),
+            $lt: new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1)
+          },
+          startTime: { 
+            $gte: `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}` 
+          },
+          status: 'missed',
+          autoCancelled: true
+        }
+      ]
+    })
+    .populate('user', 'name email')
+    .populate('service')
+    .populate('business', 'name email isDemo');
+    
+    console.log(`Found ${futureMissedAppointments.length} future appointments to restore`);
+    
+    // Debug: log all found appointments
+    if (futureMissedAppointments.length > 0) {
+      futureMissedAppointments.forEach(appt => {
+        const apptDate = new Date(appt.date);
+        console.log(`Restoring appointment: ${appt._id}, Service: ${appt.service?.name || 'Unknown'}, Date: ${apptDate.toLocaleDateString()}, Time: ${appt.startTime}, Year: ${apptDate.getFullYear()}`);
+      });
+    }
+    
+    // Restore each appointment
+    let restoredCount = 0;
+    for (const appointment of futureMissedAppointments) {
+      appointment.status = 'scheduled';
+      appointment.autoCancelled = false;
+      await appointment.save();
+      restoredCount++;
+      console.log(`Restored appointment ${appointment._id} for ${appointment.user.name}`);
+      
+      // Send email to user about restoration
+      if (appointment.user && appointment.user.email) {
+        const userMailOptions = {
+          from: process.env.EMAIL_USER,
+          to: appointment.user.email,
+          subject: 'Appointment Restored',
+          html: `
+            <h1>Appointment Restored</h1>
+            <p>Your appointment scheduled for ${new Date(appointment.date).toLocaleDateString()} at ${appointment.startTime} has been restored.</p>
+            <p>Service: ${appointment.service ? appointment.service.name : 'N/A'}</p>
+            <p>Business: ${appointment.business ? appointment.business.name : 'N/A'}</p>
+            <p>We apologize for the inconvenience.</p>
+          `
+        };
+        
+        transporter.sendMail(userMailOptions, (error) => {
+          if (error) {
+            console.error('Email sending error to user:', error);
+          } else {
+            console.log(`Restoration email sent to user: ${appointment.user.email}`);
+          }
+        });
+      }
+      
+      // Send email to business
+      if (appointment.business && appointment.business.email && !appointment.business.isDemo) {
+        const businessMailOptions = {
+          from: process.env.EMAIL_USER,
+          to: appointment.business.email,
+          subject: 'Appointment Restored',
+          html: `
+            <h1>Appointment Restored</h1>
+            <p>An appointment scheduled for ${new Date(appointment.date).toLocaleDateString()} at ${appointment.startTime} has been restored.</p>
+            <p>Service: ${appointment.service ? appointment.service.name : 'N/A'}</p>
+            <p>Customer: ${appointment.user ? appointment.user.name : 'N/A'}</p>
+          `
+        };
+        
+        transporter.sendMail(businessMailOptions, (error) => {
+          if (error) {
+            console.error('Email sending error to business:', error);
+          } else {
+            console.log(`Restoration email sent to business: ${appointment.business.email}`);
+          }
+        });
+      }
+    }
+    
+    return restoredCount;
+  } catch (error) {
+    console.error('Error restoring incorrectly marked missed appointments:', error);
+    return 0;
+  }
+}
+
+// Function to check for and handle expired appointments
+async function checkForExpiredAppointments() {
+  try {
+    const now = new Date();
+    console.log(`Checking for expired appointments at ${now.toISOString()}`);
+    
+    // Find appointments that are in the past but not cancelled or completed
+    const expiredAppointments = await Appointment.find({
+      $and: [
+        // Only include appointments whose full date+time has passed
+        {
+          $or: [
+            // Either the date is before today
+            { 
+              date: { 
+                $lt: new Date(now.getFullYear(), now.getMonth(), now.getDate()) 
+              } 
+            },
+            // Or the date is today AND the time has passed
+            {
+              date: {
+                $gte: new Date(now.getFullYear(), now.getMonth(), now.getDate()),
+                $lt: new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1)
+              },
+              startTime: { 
+                $lt: `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}` 
+              }
+            }
+          ]
+        },
+        // And the status is not already cancelled or completed
+        { status: { $nin: ['cancelled', 'completed', 'missed'] } }
+      ]
+    })
+    .populate('user', 'name email')
+    .populate('service')
+    .populate('business', 'name email isDemo');
+    
+    console.log(`Found ${expiredAppointments.length} expired appointments to mark as missed`);
+    
+    // Debug: log all found appointments
+    if (expiredAppointments.length > 0) {
+      expiredAppointments.forEach(appt => {
+        const apptDate = new Date(appt.date);
+        console.log(`Expired appointment: ${appt._id}, Service: ${appt.service?.name || 'Unknown'}, Date: ${apptDate.toLocaleDateString()}, Time: ${appt.startTime}, Status: ${appt.status}, Year: ${apptDate.getFullYear()}`);
+      });
+    }
+    
+    // Update each appointment and send notifications
+    for (const appointment of expiredAppointments) {
+      // Update appointment status to missed and mark as auto-cancelled
+      appointment.status = 'missed';
+      appointment.autoCancelled = true;
+      await appointment.save();
+      console.log(`Auto-marked appointment ${appointment._id} as missed`);
+      
+      // Send email to user
+      if (appointment.user && appointment.user.email) {
+        const userMailOptions = {
+          from: process.env.EMAIL_USER,
+          to: appointment.user.email,
+          subject: 'Appointment Missed',
+          html: `
+            <h1>Appointment Marked as Missed</h1>
+            <p>Your appointment scheduled for ${new Date(appointment.date).toLocaleDateString()} at ${appointment.startTime} has been marked as missed as the scheduled time has passed.</p>
+            <p>Service: ${appointment.service ? appointment.service.name : 'N/A'}</p>
+            <p>Business: ${appointment.business ? appointment.business.name : 'N/A'}</p>
+            <p>If you would like to reschedule, please book a new appointment.</p>
+          `
+        };
+        
+        transporter.sendMail(userMailOptions, (error) => {
+          if (error) {
+            console.error('Email sending error to user:', error);
+          } else {
+            console.log(`Missed appointment email sent to user: ${appointment.user.email}`);
+          }
+        });
+      }
+      
+      // Send email to business
+      if (appointment.business && appointment.business.email && !appointment.business.isDemo) {
+        const businessMailOptions = {
+          from: process.env.EMAIL_USER,
+          to: appointment.business.email,
+          subject: 'Appointment Missed',
+          html: `
+            <h1>Customer Missed Appointment</h1>
+            <p>The appointment scheduled for ${new Date(appointment.date).toLocaleDateString()} at ${appointment.startTime} has been marked as missed as the scheduled time has passed.</p>
+            <p>Service: ${appointment.service ? appointment.service.name : 'N/A'}</p>
+            <p>Customer: ${appointment.user ? appointment.user.name : 'N/A'}</p>
+          `
+        };
+        
+        transporter.sendMail(businessMailOptions, (error) => {
+          if (error) {
+            console.error('Email sending error to business:', error);
+          } else {
+            console.log(`Missed appointment email sent to business: ${appointment.business.email}`);
+          }
+        });
+      }
+    }
+    
+    return expiredAppointments.length;
+  } catch (error) {
+    console.error('Error in expired appointment check:', error);
+    return 0;
+  }
+}
+
+// Function to check for missed appointments (15 min grace period)
+async function checkForMissedAppointments() {
+  try {
+    const now = new Date();
+    console.log(`Checking for missed appointments at ${now.toISOString()}`);
+    
+    // Calculate the time 15 minutes ago to apply the grace period
+    const fifteenMinutesAgo = new Date(now.getTime() - 15 * 60 * 1000);
+    const currentHour = fifteenMinutesAgo.getHours().toString().padStart(2, '0');
+    const currentMinute = fifteenMinutesAgo.getMinutes().toString().padStart(2, '0');
+    const currentTimeString = `${currentHour}:${currentMinute}`;
+    
+    console.log(`Current time minus 15 minutes: ${currentTimeString}`);
+    
+    // Find all scheduled appointments - we'll filter them in JavaScript
+    // This avoids complex MongoDB queries with time strings that can cause issues
+    const scheduledAppointments = await Appointment.find({
+      status: 'scheduled'
+    })
+    .populate('user', 'name email')
+    .populate('service')
+    .populate('business', 'name email isDemo');
+    
+    // Now filter them in JavaScript where we have more control
+    const missedAppointments = scheduledAppointments.filter(appointment => {
+      const appointmentDate = new Date(appointment.date);
+      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      
+      // If appointment date is before today, it's missed
+      if (appointmentDate < today) {
+        console.log(`Appointment ${appointment._id} is missed (past date)`);
+        return true;
+      }
+      
+      // If appointment is today, check the time
+      if (appointmentDate.toDateString() === today.toDateString()) {
+        const [hours, minutes] = appointment.startTime.split(':').map(Number);
+        const appointmentTime = new Date(appointmentDate);
+        appointmentTime.setHours(hours, minutes);
+        
+        // If appointment time + 15 minutes is before now, it's missed
+        const appointmentTimeWithGrace = new Date(appointmentTime.getTime() + 15 * 60 * 1000);
+        
+        if (appointmentTimeWithGrace < now) {
+          console.log(`Appointment ${appointment._id} is missed (today with grace period elapsed)`);
+          console.log(`Appointment time: ${appointmentTime.toISOString()}, Grace period end: ${appointmentTimeWithGrace.toISOString()}, Now: ${now.toISOString()}`);
+          return true;
+        }
+      }
+      
+      return false;
+    });
+    
+    console.log(`Found ${missedAppointments.length} missed appointments`);
+    
+    // Debug: log all found appointments
+    if (missedAppointments.length > 0) {
+      missedAppointments.forEach(appt => {
+        const apptDate = new Date(appt.date);
+        console.log(`Missed appointment: ${appt._id}, Service: ${appt.service?.name || 'Unknown'}, Date: ${apptDate.toLocaleDateString()}, Time: ${appt.startTime}`);
+      });
+    }
+    
+    // Update each appointment and send notifications
+    for (const appointment of missedAppointments) {
+      // Update appointment status to missed
+      appointment.status = 'missed';
+      await appointment.save();
+      console.log(`Marked appointment ${appointment._id} as missed`);
+      
+      // Send email to user
+      if (appointment.user && appointment.user.email) {
+        const userMailOptions = {
+          from: process.env.EMAIL_USER,
+          to: appointment.user.email,
+          subject: 'Missed Appointment',
+          html: `
+            <h1>Appointment Marked as Missed</h1>
+            <p>Your appointment scheduled for ${new Date(appointment.date).toLocaleDateString()} at ${appointment.startTime} has been marked as missed as you did not attend within the 15-minute grace period.</p>
+            <p>Service: ${appointment.service ? appointment.service.name : 'N/A'}</p>
+            <p>Business: ${appointment.business ? appointment.business.name : 'N/A'}</p>
+            <p>If you would like to reschedule, please book a new appointment.</p>
+          `
+        };
+        
+        transporter.sendMail(userMailOptions, (error) => {
+          if (error) {
+            console.error('Email sending error to user:', error);
+          } else {
+            console.log(`Missed appointment email sent to user: ${appointment.user.email}`);
+          }
+        });
+      }
+      
+      // Send email to business
+      if (appointment.business && appointment.business.email && !appointment.business.isDemo) {
+        const businessMailOptions = {
+          from: process.env.EMAIL_USER,
+          to: appointment.business.email,
+          subject: 'Appointment Missed',
+          html: `
+            <h1>Customer Missed Appointment</h1>
+            <p>The appointment scheduled for ${new Date(appointment.date).toLocaleDateString()} at ${appointment.startTime} has been marked as missed as the customer did not attend within the 15-minute grace period.</p>
+            <p>Service: ${appointment.service ? appointment.service.name : 'N/A'}</p>
+            <p>Customer: ${appointment.user ? appointment.user.name : 'N/A'}</p>
+          `
+        };
+        
+        transporter.sendMail(businessMailOptions, (error) => {
+          if (error) {
+            console.error('Email sending error to business:', error);
+          } else {
+            console.log(`Missed appointment email sent to business: ${appointment.business.email}`);
+          }
+        });
+      }
+    }
+    
+    return missedAppointments.length;
+  } catch (error) {
+    console.error('Error in missed appointment check:', error);
+    return 0;
+  }
+}
+
+// Function to send appointment reminders 10 minutes before
+async function sendAppointmentReminders() {
+  try {
+    const now = new Date();
+    console.log(`Checking for appointment reminders at ${now.toISOString()}`);
+    
+    // Get all scheduled appointments
+    const scheduledAppointments = await Appointment.find({
+      status: 'scheduled',
+      reminderSent: { $ne: true } // Only get appointments where reminder hasn't been sent
+    })
+    .populate('user', 'name email')
+    .populate('service')
+    .populate('business', 'name email isDemo');
+    
+    console.log(`Found ${scheduledAppointments.length} scheduled appointments to check for reminders`);
+    
+    // Filter for appointments that are coming up in 10-15 minutes
+    const upcomingAppointments = scheduledAppointments.filter(appointment => {
+      const appointmentDate = new Date(appointment.date);
+      const [hours, minutes] = appointment.startTime.split(':').map(Number);
+      const appointmentTime = new Date(appointmentDate);
+      appointmentTime.setHours(hours, minutes);
+      
+      // Calculate time difference in minutes
+      const diffMinutes = Math.floor((appointmentTime - now) / (1000 * 60));
+      console.log(`Appointment ${appointment._id} is in ${diffMinutes} minutes`);
+      
+      // We want to send reminders for appointments that are 10-15 minutes away
+      return diffMinutes >= 10 && diffMinutes <= 15;
+    });
+    
+    console.log(`Found ${upcomingAppointments.length} appointments to send reminders for`);
+    
+    // Debug: log all found appointments
+    if (upcomingAppointments.length > 0) {
+      upcomingAppointments.forEach(appt => {
+        const apptDate = new Date(appt.date);
+        const [hours, minutes] = appt.startTime.split(':').map(Number);
+        const apptTime = new Date(apptDate);
+        apptTime.setHours(hours, minutes);
+        
+        const diffMinutes = Math.floor((apptTime - now) / (1000 * 60));
+        console.log(`Sending reminder for appointment: ${appt._id}, Service: ${appt.service?.name || 'Unknown'}, Date: ${apptDate.toLocaleDateString()}, Time: ${appt.startTime}, Minutes until: ${diffMinutes}`);
+      });
+    }
+    
+    // Send reminders for each appointment
+    for (const appointment of upcomingAppointments) {
+      // Mark reminder as sent so we don't send duplicates
+      appointment.reminderSent = true;
+      await appointment.save();
+      console.log(`Setting reminder flag for appointment ${appointment._id}`);
+      
+      // Get time until appointment for message
+      const appointmentDate = new Date(appointment.date);
+      const [hours, minutes] = appointment.startTime.split(':').map(Number);
+      const appointmentTime = new Date(appointmentDate);
+      appointmentTime.setHours(hours, minutes);
+      const minutesUntil = Math.floor((appointmentTime - now) / (1000 * 60));
+      
+      // Send email to user
+      if (appointment.user && appointment.user.email) {
+        const userMailOptions = {
+          from: process.env.EMAIL_USER,
+          to: appointment.user.email,
+          subject: 'Appointment Reminder - Starting Soon',
+          html: `
+            <h1>Appointment Reminder</h1>
+            <p>This is a reminder that your appointment is scheduled to begin in ${minutesUntil} minutes.</p>
+            <p>Date: ${new Date(appointment.date).toLocaleDateString()}</p>
+            <p>Time: ${appointment.startTime}</p>
+            <p>Service: ${appointment.service ? appointment.service.name : 'N/A'}</p>
+            <p>Business: ${appointment.business ? appointment.business.name : 'N/A'}</p>
+            <p>Please arrive on time. There is a 15-minute grace period, after which the appointment will be marked as missed.</p>
+          `
+        };
+        
+        transporter.sendMail(userMailOptions, (error) => {
+          if (error) {
+            console.error('Email sending error to user:', error);
+          } else {
+            console.log(`Reminder email sent to user: ${appointment.user.email}`);
+          }
+        });
+      }
+      
+      // Send email to business
+      if (appointment.business && appointment.business.email && !appointment.business.isDemo) {
+        const businessMailOptions = {
+          from: process.env.EMAIL_USER,
+          to: appointment.business.email,
+          subject: 'Upcoming Appointment Reminder',
+          html: `
+            <h1>Appointment Reminder</h1>
+            <p>This is a reminder that you have an appointment scheduled to begin in ${minutesUntil} minutes.</p>
+            <p>Date: ${new Date(appointment.date).toLocaleDateString()}</p>
+            <p>Time: ${appointment.startTime}</p>
+            <p>Service: ${appointment.service ? appointment.service.name : 'N/A'}</p>
+            <p>Customer: ${appointment.user ? appointment.user.name : 'N/A'}</p>
+            <p>The customer has been sent a reminder as well.</p>
+          `
+        };
+        
+        transporter.sendMail(businessMailOptions, (error) => {
+          if (error) {
+            console.error('Email sending error to business:', error);
+          } else {
+            console.log(`Reminder email sent to business: ${appointment.business.email}`);
+          }
+        });
+      }
+    }
+    
+    return upcomingAppointments.length;
+  } catch (error) {
+    console.error('Error sending appointment reminders:', error);
+    return 0;
+  }
+}
 
 // Serve static assets in production
 if (process.env.NODE_ENV === 'production') {

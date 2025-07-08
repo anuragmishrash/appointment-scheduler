@@ -5,7 +5,8 @@ const {
   getAppointments,
   getAppointmentById,
   updateAppointment,
-  cancelAppointment
+  cancelAppointment,
+  restoreFutureAppointments
 } = require('../controllers/appointmentController');
 const { protect } = require('../middleware/auth');
 
@@ -15,9 +16,14 @@ const { protect } = require('../middleware/auth');
 router.post('/', protect, createAppointment);
 
 // @route   GET /api/appointments
-// @desc    Get all appointments for logged in user
+// @desc    Get all user appointments
 // @access  Private
 router.get('/', protect, getAppointments);
+
+// @route   POST /api/appointments/restore-future
+// @desc    Restore incorrectly auto-cancelled future appointments
+// @access  Private/Admin
+router.post('/restore-future', protect, restoreFutureAppointments);
 
 // @route   GET /api/appointments/:id
 // @desc    Get appointment by ID
