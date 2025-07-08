@@ -68,11 +68,11 @@ const getAvailableTimeSlots = async (req, res) => {
   try {
     const { businessId, date } = req.params;
     
-    // Convert date string to Date object and ensure it's in UTC
+    // Convert date string to Date object
     const requestedDate = new Date(date);
     const dayOfWeek = requestedDate.getDay();
     
-    // Get current date and time in UTC
+    // Get current date and time
     const currentDate = new Date();
     
     // Check if the requested date is today (comparing dates only, not times)
@@ -81,7 +81,7 @@ const getAvailableTimeSlots = async (req, res) => {
     const currentMinute = currentDate.getMinutes();
     
     console.log(`Finding availability for businessId: ${businessId}, date: ${date}, dayOfWeek: ${dayOfWeek}`);
-    console.log(`Current server time: ${currentDate.toISOString()}`);
+    console.log(`Current server time: ${currentDate.toISOString()}, Timezone: ${process.env.TZ || 'default'}`);
     console.log(`Is today: ${isToday}, Current hour: ${currentHour}, Current minute: ${currentMinute}`);
     
     // Get business availability for this day
@@ -156,10 +156,19 @@ const getAvailableTimeSlots = async (req, res) => {
         );
         
         // Skip this slot if it's in the past for today
-        const isPastTimeSlot = isToday && (
-          startHour < currentHour || 
-          (startHour === currentHour && startMinute < currentMinute)
-        );
+        // Give at least 15 minutes buffer for booking (can't book a slot starting in less than 15 minutes)
+        const bufferMinutes = 15;
+        let isPastTimeSlot = false;
+        
+        if (isToday) {
+          // Create time objects for comparison
+          const slotTime = new Date(requestedDate);
+          slotTime.setHours(startHour, startMinute);
+          
+          const currentTimePlusBuffer = new Date(currentDate.getTime() + bufferMinutes * 60 * 1000);
+          
+          isPastTimeSlot = slotTime < currentTimePlusBuffer;
+        }
         
         if (!isBooked && !isPastTimeSlot) {
           timeSlots.push({

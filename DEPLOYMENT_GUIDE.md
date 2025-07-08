@@ -21,6 +21,7 @@ Before deploying, you need to set up environment variables for production:
 PORT=5000
 NODE_ENV=production
 TIMEZONE=Your/Timezone  # e.g., 'America/New_York', 'Europe/London', 'Asia/Kolkata'
+# You can also use TZ instead of TIMEZONE for the same purpose
 
 # MongoDB Configuration 
 MONGO_URI=mongodb+srv://username:password@cluster.mongodb.net/appointment-scheduler
@@ -70,7 +71,7 @@ For production, it's recommended to use MongoDB Atlas:
    heroku config:set EMAIL_USER=your_email@gmail.com
    heroku config:set EMAIL_PASS=your_app_specific_password
    heroku config:set NODE_ENV=production
-   heroku config:set TIMEZONE=America/New_York  # Set your application timezone
+   heroku config:set TZ=Asia/Kolkata  # Set your application timezone
    ```
 6. Push to Heroku:
    ```
@@ -91,7 +92,7 @@ For production, it's recommended to use MongoDB Atlas:
      - `JWT_SECRET`: Your JWT secret
      - `EMAIL_USER`: Your email address
      - `EMAIL_PASS`: Your email password
-     - `TIMEZONE`: Your timezone (e.g., `America/New_York`)
+     - `TZ`: Your timezone (e.g., `Asia/Kolkata`)
 5. Deploy
 
 ### Railway Deployment
@@ -106,13 +107,12 @@ For production, it's recommended to use MongoDB Atlas:
      - `JWT_SECRET`: Your JWT secret
      - `EMAIL_USER`: Your email address
      - `EMAIL_PASS`: Your email password
-     - `TIMEZONE`: Your timezone (e.g., `America/New_York`)
+     - `TZ`: Your timezone (e.g., `Asia/Kolkata`)
 5. Deploy
 
 ### Vercel + Render Deployment (Frontend/Backend Split)
 
 #### Frontend Deployment with Vercel
-
 1. Create an account at [Vercel](https://vercel.com/)
 2. Import your repository
 3. Set the root directory to `client`
@@ -123,9 +123,8 @@ For production, it's recommended to use MongoDB Atlas:
 5. Deploy
 
 #### Backend Deployment with Render
-
 Follow the Render deployment steps above, but make sure to:
-1. Set the `TIMEZONE` environment variable to match your primary user base
+1. Set the `TZ` environment variable to match your primary user base
 2. Update the server CORS configuration to allow requests from your Vercel frontend domain
 
 ### AWS Deployment
@@ -142,7 +141,7 @@ For more advanced deployment on AWS:
    JWT_SECRET=your_jwt_secret
    EMAIL_USER=your_email
    EMAIL_PASS=your_email_password
-   TIMEZONE=your_timezone  # Critical for appointment scheduling
+   TZ=Asia/Kolkata  # Critical for appointment scheduling
    ```
 5. Set up a process manager like PM2:
    ```
@@ -161,20 +160,24 @@ For more advanced deployment on AWS:
 
 ## Important Timezone Configuration
 
-The application uses the timezone specified in the `TIMEZONE` environment variable for all date/time operations. This is critical for:
+The application uses the timezone specified in the environment variables for all date/time operations. This is critical for:
 
 - Correctly filtering available time slots
 - Properly marking appointments as missed
 - Sending timely reminders to users
 
-**For each deployment platform, make sure to set the TIMEZONE environment variable:**
+**For each deployment platform, make sure to set the timezone environment variable:**
 
-- **Heroku**: `heroku config:set TIMEZONE=America/New_York`
-- **Render**: Add `TIMEZONE` in the Environment Variables section
-- **Railway**: Add `TIMEZONE` in the Variables section
-- **Vercel**: Add `TIMEZONE` in the Environment Variables section
-- **AWS**: Add `TIMEZONE` to your environment configuration
+You can use either `TIMEZONE` or `TZ` environment variable (the application checks both):
+
+- **Heroku**: `heroku config:set TZ=Asia/Kolkata`
+- **Render**: Add `TZ` in the Environment Variables section
+- **Railway**: Add `TZ` in the Variables section
+- **Vercel**: Add `TZ` in the Environment Variables section
+- **AWS**: Add `TZ` to your environment configuration
 
 If not specified, the application defaults to UTC, which may cause issues with appointment scheduling and missed appointment detection if your users are in different timezones.
+
+> **IMPORTANT:** If you're primarily serving users in India, set `TZ=Asia/Kolkata` to ensure all date/time operations use Indian Standard Time.
 
 ## Continuous Integration/Deployment

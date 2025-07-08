@@ -14,8 +14,9 @@ const nodemailer = require('nodemailer');
 dotenv.config();
 
 // Set timezone for consistent date handling
-process.env.TZ = process.env.TIMEZONE || 'UTC';
+process.env.TZ = process.env.TIMEZONE || process.env.TZ || 'UTC';
 console.log(`Server running with timezone: ${process.env.TZ}`);
+console.log(`IMPORTANT: For proper timezone handling, set the TIMEZONE or TZ environment variable to your local timezone (e.g. 'Asia/Kolkata', 'America/New_York')`);
 
 // Connect to MongoDB
 connectDB().catch(err => {
@@ -282,30 +283,13 @@ async function checkForExpiredAppointments() {
     console.log(`Current time string: ${currentTimeString}`);
     
     // Find appointments that are in the past but not cancelled or completed
+    // We only want to handle appointments from BEFORE today, not today's appointments
+    // Today's appointments should be handled by checkForMissedAppointments with grace period
     const expiredAppointments = await Appointment.find({
       $and: [
-        // Only include appointments whose full date+time has passed
-        {
-          $or: [
-            // Either the date is before today
-            { 
-              date: { 
-                $lt: todayStart
-              } 
-            },
-            // Or the date is today AND the time has passed
-            {
-              date: {
-                $gte: todayStart,
-                $lt: tomorrowStart
-              },
-              startTime: { 
-                $lt: currentTimeString
-              }
-            }
-          ]
-        },
-        // And the status is not already cancelled or completed
+        // Only include appointments from past days (not today)
+        { date: { $lt: todayStart } },
+        // And the status is not already cancelled, completed or missed
         { status: { $nin: ['cancelled', 'completed', 'missed'] } }
       ]
     })
@@ -313,7 +297,7 @@ async function checkForExpiredAppointments() {
     .populate('service')
     .populate('business', 'name email isDemo');
     
-    console.log(`Found ${expiredAppointments.length} expired appointments to mark as missed`);
+    console.log(`Found ${expiredAppointments.length} expired appointments from past days to mark as missed`);
     
     // Debug: log all found appointments
     if (expiredAppointments.length > 0) {
@@ -329,7 +313,7 @@ async function checkForExpiredAppointments() {
       appointment.status = 'missed';
       appointment.autoCancelled = true;
       await appointment.save();
-      console.log(`Auto-marked appointment ${appointment._id} as missed`);
+      console.log(`Auto-marked appointment ${appointment._id} as missed (from past day)`);
       
       // Send email to user
       if (appointment.user && appointment.user.email) {
@@ -394,11 +378,11 @@ async function checkForMissedAppointments() {
     
     // Calculate the time 15 minutes ago to apply the grace period
     const fifteenMinutesAgo = new Date(now.getTime() - 15 * 60 * 1000);
-    const currentHour = fifteenMinutesAgo.getHours().toString().padStart(2, '0');
-    const currentMinute = fifteenMinutesAgo.getMinutes().toString().padStart(2, '0');
-    const currentTimeString = `${currentHour}:${currentMinute}`;
+    const graceHour = fifteenMinutesAgo.getHours().toString().padStart(2, '0');
+    const graceMinute = fifteenMinutesAgo.getMinutes().toString().padStart(2, '0');
+    const graceTimeString = `${graceHour}:${graceMinute}`;
     
-    console.log(`Current time minus 15 minutes: ${currentTimeString}`);
+    console.log(`Current time minus 15 minutes: ${graceTimeString}`);
     
     // Create date objects for today's date (without time component)
     const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -412,37 +396,57 @@ async function checkForMissedAppointments() {
     .populate('service')
     .populate('business', 'name email isDemo');
     
+    console.log(`Found ${scheduledAppointments.length} scheduled appointments to check for missed status`);
+    
     // Now filter them in JavaScript where we have more control
     const missedAppointments = scheduledAppointments.filter(appointment => {
       const appointmentDate = new Date(appointment.date);
       const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
       
       // If appointment date is before today, it's missed
+      // (But these should have been handled by checkForExpiredAppointments already)
       if (appointmentDate < today) {
         console.log(`Appointment ${appointment._id} is missed (past date)`);
         return true;
       }
       
-      // If appointment is today, check the time
+      // If appointment is today, check if grace period has passed
       if (appointmentDate.toDateString() === today.toDateString()) {
         const [hours, minutes] = appointment.startTime.split(':').map(Number);
+        
+        // Skip future appointments
+        if (hours > now.getHours() || 
+            (hours === now.getHours() && minutes > now.getMinutes())) {
+          return false;
+        }
+        
+        // Create appointment time
         const appointmentTime = new Date(appointmentDate);
         appointmentTime.setHours(hours, minutes);
         
-        // If appointment time + 15 minutes is before now, it's missed
+        // Calculate appointment end time with 15-minute grace period
         const appointmentTimeWithGrace = new Date(appointmentTime.getTime() + 15 * 60 * 1000);
         
-        if (appointmentTimeWithGrace < now) {
-          console.log(`Appointment ${appointment._id} is missed (today with grace period elapsed)`);
-          console.log(`Appointment time: ${appointmentTime.toISOString()}, Grace period end: ${appointmentTimeWithGrace.toISOString()}, Now: ${now.toISOString()}`);
+        // Only mark as missed if grace period has passed
+        if (now > appointmentTimeWithGrace) {
+          console.log(`Appointment ${appointment._id} is missed (grace period elapsed)`);
+          console.log(`Start time: ${appointmentTime.toISOString()}`);
+          console.log(`Grace period ends: ${appointmentTimeWithGrace.toISOString()}`);
+          console.log(`Current time: ${now.toISOString()}`);
+          console.log(`Minutes since grace ended: ${Math.floor((now - appointmentTimeWithGrace) / (1000 * 60))}`);
           return true;
+        } else {
+          const minutesLeft = Math.floor((appointmentTimeWithGrace - now) / (1000 * 60));
+          console.log(`Appointment ${appointment._id} is not missed yet, ${minutesLeft} minutes left in grace period`);
+          return false;
         }
       }
       
+      // Future appointment
       return false;
     });
     
-    console.log(`Found ${missedAppointments.length} missed appointments`);
+    console.log(`Found ${missedAppointments.length} missed appointments after grace period check`);
     
     // Debug: log all found appointments
     if (missedAppointments.length > 0) {
@@ -457,7 +461,7 @@ async function checkForMissedAppointments() {
       // Update appointment status to missed
       appointment.status = 'missed';
       await appointment.save();
-      console.log(`Marked appointment ${appointment._id} as missed`);
+      console.log(`Marked appointment ${appointment._id} as missed after 15-minute grace period`);
       
       // Send email to user
       if (appointment.user && appointment.user.email) {
