@@ -228,7 +228,10 @@ appointment-scheduler/
    EMAIL_USER=your_email@gmail.com
    EMAIL_PASS=your_email_password
    NODE_ENV=development
+   TIMEZONE=Your/Timezone  # e.g., 'America/New_York', 'Europe/London', 'Asia/Kolkata'
    ```
+
+   > **Note on Timezones**: The application uses the timezone specified in the `TIMEZONE` environment variable for all date/time operations. If not specified, it defaults to UTC. This is important for appointment scheduling and missed appointment detection. For a list of valid timezone values, refer to the [IANA timezone database](https://en.wikipedia.org/wiki/List_of_tz_database_time_zones).
 
 ### MongoDB Setup
 

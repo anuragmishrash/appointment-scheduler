@@ -68,17 +68,21 @@ const getAvailableTimeSlots = async (req, res) => {
   try {
     const { businessId, date } = req.params;
     
-    // Convert date string to Date object
+    // Convert date string to Date object and ensure it's in UTC
     const requestedDate = new Date(date);
     const dayOfWeek = requestedDate.getDay();
     
-    // Get current date and time
+    // Get current date and time in UTC
     const currentDate = new Date();
+    
+    // Check if the requested date is today (comparing dates only, not times)
     const isToday = requestedDate.toDateString() === currentDate.toDateString();
     const currentHour = currentDate.getHours();
     const currentMinute = currentDate.getMinutes();
     
     console.log(`Finding availability for businessId: ${businessId}, date: ${date}, dayOfWeek: ${dayOfWeek}`);
+    console.log(`Current server time: ${currentDate.toISOString()}`);
+    console.log(`Is today: ${isToday}, Current hour: ${currentHour}, Current minute: ${currentMinute}`);
     
     // Get business availability for this day
     const availabilityList = await Availability.find({
@@ -154,7 +158,7 @@ const getAvailableTimeSlots = async (req, res) => {
         // Skip this slot if it's in the past for today
         const isPastTimeSlot = isToday && (
           startHour < currentHour || 
-          (startHour === currentHour && startMinute <= currentMinute)
+          (startHour === currentHour && startMinute < currentMinute)
         );
         
         if (!isBooked && !isPastTimeSlot) {
@@ -162,6 +166,8 @@ const getAvailableTimeSlots = async (req, res) => {
             startTime: startTimeStr,
             endTime: endTimeStr
           });
+        } else {
+          console.log(`Skipping time slot ${startTimeStr} - isBooked: ${isBooked}, isPastTimeSlot: ${isPastTimeSlot}`);
         }
         
         // Move to next slot

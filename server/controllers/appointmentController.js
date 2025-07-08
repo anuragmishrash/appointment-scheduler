@@ -482,6 +482,15 @@ const cancelAppointment = async (req, res) => {
 const restoreFutureAppointments = async (req, res) => {
   try {
     const now = new Date();
+    console.log(`Admin restoring future appointments at ${now.toISOString()}`);
+    
+    // Create date objects for today's date (without time component)
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const tomorrowStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+    
+    // Current time as string in HH:MM format
+    const currentTimeString = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
+    console.log(`Current time string: ${currentTimeString}`);
     
     // Find future appointments that were auto-marked as missed
     const futureMissedAppointments = await Appointment.find({
@@ -493,11 +502,11 @@ const restoreFutureAppointments = async (req, res) => {
         // Or date is today but time is in the future
         {
           date: {
-            $gte: new Date(now.getFullYear(), now.getMonth(), now.getDate()),
-            $lt: new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1)
+            $gte: todayStart,
+            $lt: tomorrowStart
           },
           startTime: { 
-            $gte: `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}` 
+            $gte: currentTimeString
           }
         },
         // Was auto-marked as missed

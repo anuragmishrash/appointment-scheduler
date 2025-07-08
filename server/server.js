@@ -13,6 +13,10 @@ const nodemailer = require('nodemailer');
 // Load environment variables
 dotenv.config();
 
+// Set timezone for consistent date handling
+process.env.TZ = process.env.TIMEZONE || 'UTC';
+console.log(`Server running with timezone: ${process.env.TZ}`);
+
 // Connect to MongoDB
 connectDB().catch(err => {
   console.error('Failed to connect to MongoDB', err);
@@ -152,24 +156,33 @@ restoreIncorrectlyAutoCancel();
 async function restoreIncorrectlyAutoCancel() {
   try {
     const now = new Date();
+    console.log(`Checking for incorrectly marked appointments at ${now.toISOString()}`);
+    
+    // Create date objects for today's date (without time component)
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const tomorrowStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+    
+    // Current time as string in HH:MM format
+    const currentTimeString = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
+    console.log(`Current time string: ${currentTimeString}`);
     
     // Find future appointments that were auto-marked as missed
     const futureMissedAppointments = await Appointment.find({
       $or: [
         // Either date is in the future
         { 
-          date: { $gt: new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1) },
+          date: { $gt: tomorrowStart },
           status: 'missed',
           autoCancelled: true
         },
         // Or date is today but time is in the future
         {
           date: {
-            $gte: new Date(now.getFullYear(), now.getMonth(), now.getDate()),
-            $lt: new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1)
+            $gte: todayStart,
+            $lt: tomorrowStart
           },
           startTime: { 
-            $gte: `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}` 
+            $gte: currentTimeString
           },
           status: 'missed',
           autoCancelled: true
@@ -260,6 +273,14 @@ async function checkForExpiredAppointments() {
     const now = new Date();
     console.log(`Checking for expired appointments at ${now.toISOString()}`);
     
+    // Create date objects for today's date (without time component)
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const tomorrowStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+    
+    // Current time as string in HH:MM format
+    const currentTimeString = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
+    console.log(`Current time string: ${currentTimeString}`);
+    
     // Find appointments that are in the past but not cancelled or completed
     const expiredAppointments = await Appointment.find({
       $and: [
@@ -269,17 +290,17 @@ async function checkForExpiredAppointments() {
             // Either the date is before today
             { 
               date: { 
-                $lt: new Date(now.getFullYear(), now.getMonth(), now.getDate()) 
+                $lt: todayStart
               } 
             },
             // Or the date is today AND the time has passed
             {
               date: {
-                $gte: new Date(now.getFullYear(), now.getMonth(), now.getDate()),
-                $lt: new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1)
+                $gte: todayStart,
+                $lt: tomorrowStart
               },
               startTime: { 
-                $lt: `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}` 
+                $lt: currentTimeString
               }
             }
           ]
@@ -365,7 +386,7 @@ async function checkForExpiredAppointments() {
   }
 }
 
-// Function to check for missed appointments (15 min grace period)
+// Function to check for missed appointments
 async function checkForMissedAppointments() {
   try {
     const now = new Date();
@@ -378,6 +399,9 @@ async function checkForMissedAppointments() {
     const currentTimeString = `${currentHour}:${currentMinute}`;
     
     console.log(`Current time minus 15 minutes: ${currentTimeString}`);
+    
+    // Create date objects for today's date (without time component)
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     
     // Find all scheduled appointments - we'll filter them in JavaScript
     // This avoids complex MongoDB queries with time strings that can cause issues
@@ -496,6 +520,9 @@ async function sendAppointmentReminders() {
     const now = new Date();
     console.log(`Checking for appointment reminders at ${now.toISOString()}`);
     
+    // Create date objects for today's date (without time component)
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    
     // Get all scheduled appointments
     const scheduledAppointments = await Appointment.find({
       status: 'scheduled',
@@ -584,13 +611,12 @@ async function sendAppointmentReminders() {
           to: appointment.business.email,
           subject: 'Upcoming Appointment Reminder',
           html: `
-            <h1>Appointment Reminder</h1>
+            <h1>Upcoming Appointment Reminder</h1>
             <p>This is a reminder that you have an appointment scheduled to begin in ${minutesUntil} minutes.</p>
             <p>Date: ${new Date(appointment.date).toLocaleDateString()}</p>
             <p>Time: ${appointment.startTime}</p>
             <p>Service: ${appointment.service ? appointment.service.name : 'N/A'}</p>
             <p>Customer: ${appointment.user ? appointment.user.name : 'N/A'}</p>
-            <p>The customer has been sent a reminder as well.</p>
           `
         };
         
