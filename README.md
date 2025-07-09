@@ -267,22 +267,6 @@ npm start
 
 Open your browser and navigate to `http://localhost:3000`
 
-### Troubleshooting
-
-If you encounter any issues during setup or while running the application, please refer to the [TROUBLESHOOTING.md](TROUBLESHOOTING.md) guide for solutions to common problems.
-
-## Deployment
-
-For detailed deployment instructions, please refer to our [DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md) that covers:
-
-- Environment setup for production
-- MongoDB Atlas setup
-- Deployment options:
-  - Heroku
-  - Render
-  - Railway
-  - Vercel + Render (Frontend/Backend split)
-  - AWS
 
 ## User Types
 
