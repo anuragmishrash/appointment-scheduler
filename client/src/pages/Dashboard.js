@@ -374,7 +374,10 @@ const Dashboard = () => {
   // Filter appointments by status
   const scheduledAppointments = appointments.filter(appointment => appointment.status === 'scheduled');
   const cancelledAppointments = appointments.filter(appointment => appointment.status === 'cancelled');
-  // const missedAppointments = appointments.filter(appointment => appointment.status === 'missed');
+  // Update the missedAppointments state with filtered appointments
+  useEffect(() => {
+    setMissedAppointments(appointments.filter(appointment => appointment.status === 'missed'));
+  }, [appointments]);
 
   // Redirect business users to the business dashboard
   if (user && user.role === 'business') {
