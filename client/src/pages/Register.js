@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link as RouterLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import {
@@ -42,7 +42,7 @@ const Register = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   
-  const { register } = useAuth();
+  const { register, authError, clearAuthError } = useAuth();
   const navigate = useNavigate();
   
   const { 
@@ -58,6 +58,19 @@ const Register = () => {
     businessCategory
   } = formData;
   
+  // Clear errors on mount
+  useEffect(() => {
+    setError('');
+    clearAuthError();
+  }, [clearAuthError]);
+  
+  // Update local error state when auth context error changes
+  useEffect(() => {
+    if (authError) {
+      setError(authError);
+    }
+  }, [authError]);
+  
   const handleChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
     setError('');
@@ -69,6 +82,11 @@ const Register = () => {
   
   const toggleShowConfirmPassword = () => {
     setShowConfirmPassword(!showConfirmPassword);
+  };
+  
+  const clearLocalStorage = () => {
+    localStorage.removeItem('token');
+    localStorage.removeItem('userId');
   };
   
   const handleSubmit = async (e) => {
@@ -100,6 +118,9 @@ const Register = () => {
     setError('');
     
     try {
+      // Clear any existing tokens before registration
+      clearLocalStorage();
+      
       // Prepare registration data - ensure all required fields are explicitly set
       const userData = {
         name: name.trim(),
@@ -126,20 +147,26 @@ const Register = () => {
         password: '[REDACTED]'
       });
       
-      const success = await register(userData);
-      if (success) {
-        if (role === 'business') {
-          navigate('/business/dashboard');
+      // Try registration with a small delay to ensure storage is cleared
+      setTimeout(async () => {
+        const success = await register(userData);
+        if (success) {
+          if (role === 'business') {
+            navigate('/business/dashboard');
+          } else {
+            navigate('/dashboard');
+          }
         } else {
-          navigate('/dashboard');
+          // If registration failed but no error was set in auth context
+          if (!authError) {
+            setError('Registration failed. Please check your information and try again.');
+          }
         }
-      } else {
-        setError('Registration failed. Please check your information and try again.');
-      }
+        setLoading(false);
+      }, 300);
     } catch (error) {
       console.error('Error during registration:', error);
       setError('Registration failed. Please try again later.');
-    } finally {
       setLoading(false);
     }
   };

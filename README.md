@@ -334,7 +334,33 @@ For detailed deployment instructions, please refer to our [DEPLOYMENT_GUIDE.md](
 - **Password Hashing**: Passwords are securely hashed
 - **Protected Routes**: API endpoints are protected based on user roles
 - **Input Validation**: All inputs are validated and sanitized
-- **Error Handling**: Comprehensive error handling throughout the application
+
+## Authentication System
+
+The application uses JSON Web Tokens (JWT) for authentication. Here's how it works:
+
+1. **Token Generation**: When a user logs in or registers, the server generates a JWT token signed with a secret key.
+2. **Token Storage**: The token is stored in the browser's localStorage.
+3. **Token Usage**: The token is sent with every API request in the Authorization header.
+4. **Token Verification**: The server verifies the token's signature and validity before processing requests.
+
+### Preventing Authentication Issues
+
+To ensure smooth authentication across all devices:
+
+1. **Environment Variables**: 
+   - Always set the `JWT_SECRET` environment variable in all environments (development, staging, production)
+   - Use the same secret value across all environments to maintain token compatibility
+
+2. **Client-Side Storage**: 
+   - If users experience login issues, advise them to clear browser cache and local storage
+   - Try using incognito/private browsing mode if persistent issues occur
+
+3. **Token Expiration**: 
+   - Tokens expire after 30 days by default
+   - Users will need to log in again after expiration
+
+For detailed deployment instructions, including setting up authentication properly, refer to the [DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md).
 
 ## Future Enhancements
 

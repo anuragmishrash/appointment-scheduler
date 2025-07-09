@@ -145,18 +145,27 @@ const Login = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [retryCount, setRetryCount] = useState(0);
   
-  const { login } = useAuth();
+  const { login, authError, clearAuthError } = useAuth();
   const navigate = useNavigate();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   
   const { email, password } = formData;
   
+  // Clear errors on mount
   useEffect(() => {
-    // Clear any previous errors when component mounts
     setError('');
-  }, []);
+    clearAuthError();
+  }, [clearAuthError]);
+  
+  // Update local error state when auth context error changes
+  useEffect(() => {
+    if (authError) {
+      setError(authError);
+    }
+  }, [authError]);
   
   const handleChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -165,6 +174,11 @@ const Login = () => {
   
   const toggleShowPassword = () => {
     setShowPassword(!showPassword);
+  };
+  
+  const clearLocalStorage = () => {
+    localStorage.removeItem('token');
+    localStorage.removeItem('userId');
   };
   
   const handleSubmit = async (e) => {
@@ -178,15 +192,36 @@ const Login = () => {
     setLoading(true);
     
     try {
-      const success = await login(email, password);
-      if (success) {
-        showToast.success('Login successful! Welcome back.');
-        navigate('/dashboard');
-      }
+      // Clear browser storage before login attempt
+      clearLocalStorage();
+      
+      // Try login with a small delay to ensure storage is cleared
+      setTimeout(async () => {
+        const success = await login(email, password);
+        if (success) {
+          showToast.success('Login successful! Welcome back.');
+          navigate('/dashboard');
+        } else {
+          // If login failed but no error was set in auth context
+          if (!authError) {
+            setError('Login failed. Please check your credentials.');
+          }
+          
+          // If multiple failures, suggest clearing cache
+          if (retryCount > 1) {
+            setError((prevError) => 
+              `${prevError}. Try clearing your browser cache or using private/incognito mode.`
+            );
+          }
+          
+          setRetryCount(prev => prev + 1);
+        }
+        setLoading(false);
+      }, 300);
     } catch (error) {
-      setError('Login failed. Please check your credentials.');
-      showToast.error('Login failed. Please check your credentials.');
-    } finally {
+      console.error('Login submission error:', error);
+      setError('Login failed. Please try again later.');
+      showToast.error('Login failed. Please try again later.');
       setLoading(false);
     }
   };

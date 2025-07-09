@@ -9,9 +9,43 @@ const Appointment = require('./models/Appointment');
 const User = require('./models/User');
 const Service = require('./models/Service');
 const nodemailer = require('nodemailer');
+const crypto = require('crypto');
 
 // Load environment variables
 dotenv.config();
+
+// Validate critical environment variables
+const validateEnvironment = () => {
+  // Check JWT_SECRET
+  if (!process.env.JWT_SECRET) {
+    console.error('\x1b[31m%s\x1b[0m', '❌ CRITICAL ERROR: JWT_SECRET environment variable is not set!');
+    console.error('\x1b[33m%s\x1b[0m', '⚠️  Authentication will fail. Set JWT_SECRET in your environment or .env file.');
+    
+    // In development, we can set a temporary secret, but in production we should fail
+    if (process.env.NODE_ENV === 'production') {
+      console.error('\x1b[31m%s\x1b[0m', '❌ Refusing to start in production without JWT_SECRET. Exiting.');
+      process.exit(1);
+    } else {
+      // Generate a temporary secret for development only
+      const tempSecret = crypto.randomBytes(32).toString('hex');
+      console.warn('\x1b[33m%s\x1b[0m', `⚠️  Setting temporary JWT_SECRET for development: ${tempSecret.substring(0, 10)}...`);
+      process.env.JWT_SECRET = tempSecret;
+    }
+  } else {
+    console.log('\x1b[32m%s\x1b[0m', '✅ JWT_SECRET is configured');
+  }
+  
+  // Check MongoDB connection string
+  if (!process.env.MONGO_URI) {
+    console.error('\x1b[31m%s\x1b[0m', '❌ MONGO_URI environment variable is not set!');
+    console.error('\x1b[33m%s\x1b[0m', '⚠️  Will attempt to connect to default MongoDB URL (localhost)');
+  } else {
+    console.log('\x1b[32m%s\x1b[0m', '✅ MONGO_URI is configured');
+  }
+};
+
+// Run environment validation
+validateEnvironment();
 
 // Set timezone for consistent date handling
 process.env.TZ = process.env.TIMEZONE || process.env.TZ || 'UTC';

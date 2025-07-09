@@ -11,6 +11,8 @@ This guide provides step-by-step instructions for deploying the Appointment Sche
   - [Railway Deployment](#railway-deployment)
   - [Vercel + Render Deployment](#vercel--render-deployment)
   - [AWS Deployment](#aws-deployment)
+- [Critical Environment Variables](#critical-environment-variables)
+- [Troubleshooting Authentication Issues](#troubleshooting-authentication-issues)
 
 ## Environment Setup
 
@@ -26,13 +28,34 @@ TIMEZONE=Your/Timezone  # e.g., 'America/New_York', 'Europe/London', 'Asia/Kolka
 # MongoDB Configuration 
 MONGO_URI=mongodb+srv://username:password@cluster.mongodb.net/appointment-scheduler
 
-# JWT Configuration
+# JWT Configuration (CRITICAL)
 JWT_SECRET=your_strong_random_secret_key_here
 
 # Email Configuration
 EMAIL_USER=your_email@gmail.com
 EMAIL_PASS=your_app_specific_password
 ```
+
+## Critical Environment Variables
+
+### JWT_SECRET (MOST IMPORTANT)
+
+The `JWT_SECRET` is **absolutely critical** for authentication to work properly. This secret key is used to sign and verify JWT tokens that authenticate users.
+
+⚠️ **IMPORTANT**: 
+- The JWT_SECRET must be the same across all environments (development, staging, production)
+- If you change the JWT_SECRET, all existing user sessions will be invalidated
+- Without a properly set JWT_SECRET, users will experience random authentication failures
+- For security, use a strong random string (at least 32 characters)
+
+You can generate a secure random string using this command:
+```
+node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+```
+
+### TIMEZONE / TZ
+
+The timezone setting is critical for proper appointment scheduling and missed appointment detection. Set this to match your primary user base's timezone.
 
 ## MongoDB Atlas Setup
 
@@ -89,7 +112,7 @@ For production, it's recommended to use MongoDB Atlas:
    - Set environment variables in the Render dashboard:
      - `NODE_ENV`: `production`
      - `MONGO_URI`: Your MongoDB connection string
-     - `JWT_SECRET`: Your JWT secret
+     - `JWT_SECRET`: Your JWT secret (CRITICAL)
      - `EMAIL_USER`: Your email address
      - `EMAIL_PASS`: Your email password
      - `TZ`: Your timezone (e.g., `Asia/Kolkata`)
@@ -104,7 +127,7 @@ For production, it's recommended to use MongoDB Atlas:
    - Set environment variables in the Railway dashboard:
      - `NODE_ENV`: `production`
      - `MONGO_URI`: Your MongoDB connection string
-     - `JWT_SECRET`: Your JWT secret
+     - `JWT_SECRET`: Your JWT secret (CRITICAL)
      - `EMAIL_USER`: Your email address
      - `EMAIL_PASS`: Your email password
      - `TZ`: Your timezone (e.g., `Asia/Kolkata`)
@@ -126,6 +149,7 @@ For production, it's recommended to use MongoDB Atlas:
 Follow the Render deployment steps above, but make sure to:
 1. Set the `TZ` environment variable to match your primary user base
 2. Update the server CORS configuration to allow requests from your Vercel frontend domain
+3. Double-check that `JWT_SECRET` is properly set
 
 ### AWS Deployment
 
@@ -176,8 +200,25 @@ You can use either `TIMEZONE` or `TZ` environment variable (the application chec
 - **Vercel**: Add `TZ` in the Environment Variables section
 - **AWS**: Add `TZ` to your environment configuration
 
-If not specified, the application defaults to UTC, which may cause issues with appointment scheduling and missed appointment detection if your users are in different timezones.
+## Troubleshooting Authentication Issues
 
-> **IMPORTANT:** If you're primarily serving users in India, set `TZ=Asia/Kolkata` to ensure all date/time operations use Indian Standard Time.
+If users experience authentication issues (login failures, random logouts), check these common causes:
 
-## Continuous Integration/Deployment
+1. **JWT_SECRET not set or inconsistent**:
+   - Verify JWT_SECRET is set in your environment variables
+   - Ensure it's the same value across all instances/deployments
+   - Never change JWT_SECRET without planning for user re-authentication
+
+2. **Client-side storage issues**:
+   - Ask users to clear browser cache and local storage
+   - Try using incognito/private browsing mode
+   - Check for browser extensions that might interfere with localStorage
+
+3. **Cross-origin issues**:
+   - Ensure your CORS configuration allows requests from your client domain
+   - Check for secure cookie issues between HTTP and HTTPS
+
+4. **Token expiration**:
+   - The default token expiration is 30 days
+   - Check server logs for token expiration errors
+   - Consider adjusting token lifetime in `authController.js` if needed
