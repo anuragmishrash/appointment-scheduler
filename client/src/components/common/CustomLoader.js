@@ -7,7 +7,7 @@ const LoaderContainer = styled(Box)`
   display: flex;
   justify-content: center;
   align-items: center;
-  min-height: ${props => props.fullScreen ? '100vh' : '200px'};
+  min-height: ${props => props['data-fullscreen'] === 'true' ? '100vh' : '200px'};
   width: 100%;
   flex-direction: column;
   padding: 30px;
@@ -68,7 +68,7 @@ const itemVariants = {
 
 const CustomLoader = ({ text = 'Loading...', fullScreen = false, textColor }) => {
   return (
-    <LoaderContainer fullScreen={fullScreen}>
+    <LoaderContainer data-fullscreen={fullScreen.toString()}>
       <CalendarGrid
         animate="animate"
         variants={containerVariants}

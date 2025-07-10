@@ -177,8 +177,18 @@ const Login = () => {
   };
   
   const clearLocalStorage = () => {
+    console.log('Clearing all auth-related localStorage data');
     localStorage.removeItem('token');
     localStorage.removeItem('userId');
+    
+    // Clear any other potential cached auth data
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key && (key.includes('token') || key.includes('user') || key.includes('auth'))) {
+        console.log(`Removing potential auth-related item: ${key}`);
+        localStorage.removeItem(key);
+      }
+    }
   };
   
   const handleSubmit = async (e) => {
@@ -190,6 +200,7 @@ const Login = () => {
     }
     
     setLoading(true);
+    setError('');
     
     try {
       // Clear browser storage before login attempt
@@ -197,24 +208,43 @@ const Login = () => {
       
       // Try login with a small delay to ensure storage is cleared
       setTimeout(async () => {
-        const success = await login(email, password);
-        if (success) {
-          showToast.success('Login successful! Welcome back.');
-          navigate('/dashboard');
-        } else {
-          // If login failed but no error was set in auth context
-          if (!authError) {
-            setError('Login failed. Please check your credentials.');
+        try {
+          const success = await login(email, password);
+          if (success) {
+            showToast.success('Login successful! Welcome back.');
+            navigate('/dashboard');
+          } else {
+            // If login failed but no error was set in auth context
+            if (!authError) {
+              setError('Login failed. Please check your credentials.');
+            }
+            
+            // If multiple failures, suggest clearing cache
+            if (retryCount > 1) {
+              setError((prevError) => 
+                `${prevError}. Try clearing your browser cache or using private/incognito mode.`
+              );
+            }
+            
+            setRetryCount(prev => prev + 1);
           }
+        } catch (loginError) {
+          console.error('Login error caught:', loginError);
           
-          // If multiple failures, suggest clearing cache
-          if (retryCount > 1) {
-            setError((prevError) => 
-              `${prevError}. Try clearing your browser cache or using private/incognito mode.`
+          if (loginError.message && loginError.message.includes('Network Error')) {
+            setError(
+              'Cannot connect to server. Please check if the server is running and your internet connection is stable.'
             );
+            
+            // Show more helpful information in development
+            if (process.env.NODE_ENV === 'development') {
+              setError(
+                'Cannot connect to server at http://localhost:5000. Please make sure your backend server is running (cd server && npm start).'
+              );
+            }
+          } else {
+            setError('Connection error. Please check your network and try again.');
           }
-          
-          setRetryCount(prev => prev + 1);
         }
         setLoading(false);
       }, 300);

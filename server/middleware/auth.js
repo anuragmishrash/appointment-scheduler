@@ -14,14 +14,40 @@ const protect = async (req, res, next) => {
     });
   }
 
+  // Enhanced JWT_SECRET validation - avoid common issues with empty strings or malformed secrets
+  if (process.env.JWT_SECRET.trim() === '') {
+    console.error('CRITICAL ERROR: JWT_SECRET environment variable is empty!');
+    return res.status(500).json({ 
+      message: 'Server configuration error: JWT_SECRET is empty',
+      details: 'Contact administrator - JWT_SECRET must not be an empty string'
+    });
+  }
+
   // Check if token exists in headers
   if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
     try {
       // Get token from header
       token = req.headers.authorization.split(' ')[1];
 
+      // Check for empty token
+      if (!token || token.trim() === '') {
+        return res.status(401).json({ 
+          message: 'Not authorized, empty token provided',
+          details: 'Please log in again with valid credentials'
+        });
+      }
+
       // Verify token
       const decoded = jwt.verify(token, process.env.JWT_SECRET);
+
+      // Check if decoded id exists
+      if (!decoded.id) {
+        return res.status(401).json({
+          message: 'Invalid token format - missing user identifier',
+          action: 'logout',
+          details: 'Please log in again'
+        });
+      }
 
       // Get user from token
       req.user = await User.findById(decoded.id).select('-password');
@@ -54,6 +80,12 @@ const protect = async (req, res, next) => {
             action: 'logout',
             details: 'Please try clearing browser cache and logging in again'
           });
+        } else if (error.message.includes('Unexpected token')) {
+          return res.status(401).json({
+            message: 'Authentication failed: Malformed token',
+            action: 'logout',
+            details: 'Please clear browser data and log in again'
+          });
         }
       } else if (error.name === 'TokenExpiredError') {
         return res.status(401).json({ 
@@ -66,9 +98,15 @@ const protect = async (req, res, next) => {
       return res.status(401).json({ 
         message: 'Not authorized, token validation failed',
         action: 'logout',
-        details: 'Please try logging in again'
+        details: `Error: ${error.name} - Please try logging in again`
       });
     }
+  } else if (req.headers.authorization) {
+    // Authorization header exists but in wrong format
+    return res.status(401).json({
+      message: 'Invalid authorization format',
+      details: 'Authorization header must start with "Bearer"'
+    });
   }
 
   if (!token) {

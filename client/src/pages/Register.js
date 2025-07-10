@@ -85,8 +85,18 @@ const Register = () => {
   };
   
   const clearLocalStorage = () => {
+    console.log('Clearing all auth-related localStorage data');
     localStorage.removeItem('token');
     localStorage.removeItem('userId');
+    
+    // Clear any other potential cached auth data
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key && (key.includes('token') || key.includes('user') || key.includes('auth'))) {
+        console.log(`Removing potential auth-related item: ${key}`);
+        localStorage.removeItem(key);
+      }
+    }
   };
   
   const handleSubmit = async (e) => {
@@ -149,17 +159,36 @@ const Register = () => {
       
       // Try registration with a small delay to ensure storage is cleared
       setTimeout(async () => {
-        const success = await register(userData);
-        if (success) {
-          if (role === 'business') {
-            navigate('/business/dashboard');
+        try {
+          const success = await register(userData);
+          if (success) {
+            if (role === 'business') {
+              navigate('/business/dashboard');
+            } else {
+              navigate('/dashboard');
+            }
           } else {
-            navigate('/dashboard');
+            // If registration failed but no error was set in auth context
+            if (!authError) {
+              setError('Registration failed. Please check your information and try again.');
+            }
           }
-        } else {
-          // If registration failed but no error was set in auth context
-          if (!authError) {
-            setError('Registration failed. Please check your information and try again.');
+        } catch (regError) {
+          console.error('Registration error caught:', regError);
+          
+          if (regError.message && regError.message.includes('Network Error')) {
+            setError(
+              'Cannot connect to server. Please check if the server is running and your internet connection is stable.'
+            );
+            
+            // Show more helpful information in development
+            if (process.env.NODE_ENV === 'development') {
+              setError(
+                'Cannot connect to server at http://localhost:5000. Please make sure your backend server is running (cd server && npm start).'
+              );
+            }
+          } else {
+            setError('Connection error. Please check your network and try again.');
           }
         }
         setLoading(false);

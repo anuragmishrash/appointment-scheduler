@@ -12,6 +12,7 @@ import Footer from './components/layout/Footer';
 import AppNotification from './components/layout/AppNotification';
 import PageTransition from './components/common/PageTransition';
 import CustomLoader from './components/common/CustomLoader';
+import ServerStatusCheck from './components/common/ServerStatusCheck';
 
 // Page Components
 import Home from './pages/Home';
@@ -75,6 +76,7 @@ const App = () => {
       <CssBaseline />
       <Navbar />
       {user && <AppNotification appointments={appointments} />}
+      <ServerStatusCheck />
       <Box 
         className="container" 
         sx={{ 

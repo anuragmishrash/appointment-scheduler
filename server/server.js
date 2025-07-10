@@ -31,6 +31,23 @@ const validateEnvironment = () => {
       console.warn('\x1b[33m%s\x1b[0m', `⚠️  Setting temporary JWT_SECRET for development: ${tempSecret.substring(0, 10)}...`);
       process.env.JWT_SECRET = tempSecret;
     }
+  } else if (process.env.JWT_SECRET.trim() === '') {
+    console.error('\x1b[31m%s\x1b[0m', '❌ CRITICAL ERROR: JWT_SECRET environment variable is empty!');
+    
+    if (process.env.NODE_ENV === 'production') {
+      console.error('\x1b[31m%s\x1b[0m', '❌ Refusing to start in production with empty JWT_SECRET. Exiting.');
+      process.exit(1);
+    } else {
+      // Generate a temporary secret for development only
+      const tempSecret = crypto.randomBytes(32).toString('hex');
+      console.warn('\x1b[33m%s\x1b[0m', `⚠️  Setting temporary JWT_SECRET for development: ${tempSecret.substring(0, 10)}...`);
+      process.env.JWT_SECRET = tempSecret;
+    }
+  } else if (process.env.JWT_SECRET.length < 16) {
+    console.warn('\x1b[33m%s\x1b[0m', '⚠️  JWT_SECRET is very short. For security, use at least 32 characters.');
+    if (process.env.NODE_ENV === 'production') {
+      console.warn('\x1b[33m%s\x1b[0m', '⚠️  Running in production with a weak JWT_SECRET is not recommended.');
+    }
   } else {
     console.log('\x1b[32m%s\x1b[0m', '✅ JWT_SECRET is configured');
   }
@@ -42,6 +59,16 @@ const validateEnvironment = () => {
   } else {
     console.log('\x1b[32m%s\x1b[0m', '✅ MONGO_URI is configured');
   }
+  
+  // Log all environment variables (excluding sensitive ones)
+  console.log('\nEnvironment configuration:');
+  console.log(`NODE_ENV: ${process.env.NODE_ENV || 'not set'}`);
+  console.log(`PORT: ${process.env.PORT || '5000 (default)'}`);
+  console.log(`TIMEZONE: ${process.env.TIMEZONE || process.env.TZ || 'UTC (default)'}`);
+  console.log(`CLIENT_URL: ${process.env.CLIENT_URL || 'not set'}`);
+  console.log(`JWT_SECRET: ${process.env.JWT_SECRET ? '******' : 'not set'}`);
+  console.log(`EMAIL_USER: ${process.env.EMAIL_USER ? '******' : 'not set'}`);
+  console.log('\n');
 };
 
 // Run environment validation
@@ -86,37 +113,60 @@ const PORT = process.env.PORT || 5000;
 
 // List of allowed origins
 const allowedOrigins = [
-  'https://appointment-scheduler-d04b5avyp-anurags-projects-cdaddaeb.vercel.app',
+  'https://appointment-scheduler-ah4f.onrender.com',
   'https://appointment-scheduler-client.vercel.app',
   'https://appointment-scheduler-drab.vercel.app',
+  'https://appointment-scheduler-git-main-anurags-projects.vercel.app',
+  'https://appointment-scheduler-react.vercel.app',
   'http://localhost:3000'
 ];
 
+// Add dynamic domain detection from CLIENT_URL environment variable
 if (process.env.CLIENT_URL) {
-  allowedOrigins.push(process.env.CLIENT_URL);
+  // Handle comma-separated list of URLs
+  const clientUrls = process.env.CLIENT_URL.split(',').map(url => url.trim());
+  clientUrls.forEach(url => {
+    if (url && !allowedOrigins.includes(url)) {
+      allowedOrigins.push(url);
+      console.log(`Added ${url} to allowed CORS origins from CLIENT_URL environment variable`);
+    }
+  });
 }
+
+console.log('CORS allowed origins:', allowedOrigins);
 
 // CORS Configuration
 const corsOptions = {
   origin: function (origin, callback) {
-    // Allow requests with no origin (like mobile apps or curl requests)
-    if (!origin) return callback(null, true);
+    // Allow requests with no origin (like mobile apps, Postman, or curl requests)
+    if (!origin) {
+      console.log('Request with no origin allowed');
+      return callback(null, true);
+    }
     
+    // Check if origin is in allowed list or we're in development mode
     if (allowedOrigins.indexOf(origin) !== -1 || process.env.NODE_ENV !== 'production') {
       callback(null, true);
     } else {
-      console.log('CORS blocked origin:', origin);
-      callback(null, true); // Allow all origins in case of misconfiguration
+      console.log('CORS request from unauthorized origin:', origin);
+      // In production, we still allow all origins to prevent issues, but log the warning
+      console.warn(`⚠️  Non-whitelisted origin: ${origin}. Consider adding to allowedOrigins if legitimate.`);
+      callback(null, true); 
     }
   },
-  methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
+  methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
   credentials: true,
   optionsSuccessStatus: 204,
-  allowedHeaders: ['Content-Type', 'Authorization']
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin'],
+  preflightContinue: false,
+  maxAge: 86400  // 24 hours - how long the results of a preflight request can be cached
 };
 
-// Middleware
+// Apply CORS middleware
 app.use(cors(corsOptions));
+
+// Enable preflight requests for all routes
+app.options('*', cors(corsOptions));
 
 // Request body parsers with increased limits
 app.use(express.json({ limit: '10mb' }));
