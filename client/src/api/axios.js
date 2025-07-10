@@ -3,14 +3,7 @@ import axios from 'axios';
 // Determine the base URL based on environment
 const getBaseURL = () => {
   if (process.env.NODE_ENV === 'production') {
-    // Primary production URL
-    const primaryUrl = 'https://appointment-scheduler-ah4f.onrender.com';
-    
-    // Check for a REACT_APP_API_URL environment variable as a fallback/override
-    const envApiUrl = process.env.REACT_APP_API_URL;
-    
-    // Use environment variable if available, otherwise use the hardcoded URL
-    return envApiUrl || primaryUrl;
+    return 'https://appointment-scheduler-ah4f.onrender.com';
   }
   
   // For local development, try to detect if the default port is unavailable
@@ -41,10 +34,8 @@ const api = axios.create({
   timeout: 20000 // 20 seconds timeout
 });
 
-// Log API configuration in development
+// Check connection and update baseURL if needed
 if (process.env.NODE_ENV === 'development') {
-  console.log(`🔌 API configured with baseURL: ${api.defaults.baseURL}`);
-  
   // In development, we'll check the connection and show helpful messages
   (async () => {
     const baseUrl = getBaseURL();
@@ -120,9 +111,6 @@ api.interceptors.response.use(
         if (errorData.message && errorData.message.includes('JWT_SECRET')) {
           console.error('Server configuration error:', errorData.message);
         }
-      } else if (error.response.status === 404) {
-        // Handle 404 errors - might indicate API endpoint changed or deployment issues
-        console.error(`API endpoint not found: ${error.config.url}`);
       }
       
       // Log detailed error information

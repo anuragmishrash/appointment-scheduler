@@ -113,36 +113,21 @@ const PORT = process.env.PORT || 5000;
 
 // List of allowed origins
 const allowedOrigins = [
-  'https://appointment-scheduler-ah4f.onrender.com',
+  'https://appointment-scheduler-d04b5avyp-anurags-projects-cdaddaeb.vercel.app',
   'https://appointment-scheduler-client.vercel.app',
   'https://appointment-scheduler-drab.vercel.app',
-  'https://appointment-scheduler-git-main-anurags-projects.vercel.app',
-  'https://appointment-scheduler-react.vercel.app',
   'http://localhost:3000'
 ];
 
-// Add dynamic domain detection from CLIENT_URL environment variable
 if (process.env.CLIENT_URL) {
-  // Handle comma-separated list of URLs
-  const clientUrls = process.env.CLIENT_URL.split(',').map(url => url.trim());
-  clientUrls.forEach(url => {
-    if (url && !allowedOrigins.includes(url)) {
-      allowedOrigins.push(url);
-      console.log(`Added ${url} to allowed CORS origins from CLIENT_URL environment variable`);
-    }
-  });
+  allowedOrigins.push(process.env.CLIENT_URL);
 }
-
-console.log('CORS allowed origins:', allowedOrigins);
 
 // CORS Configuration
 const corsOptions = {
   origin: function (origin, callback) {
-    // Allow requests with no origin (like mobile apps, Postman, or curl requests)
-    if (!origin) {
-      console.log('Request with no origin allowed');
-      return callback(null, true);
-    }
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) return callback(null, true);
     
     // Check if origin is in allowed list or we're in development mode
     if (allowedOrigins.indexOf(origin) !== -1 || process.env.NODE_ENV !== 'production') {
@@ -154,19 +139,14 @@ const corsOptions = {
       callback(null, true); 
     }
   },
-  methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
+  methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
   credentials: true,
   optionsSuccessStatus: 204,
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin'],
-  preflightContinue: false,
-  maxAge: 86400  // 24 hours - how long the results of a preflight request can be cached
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
 };
 
-// Apply CORS middleware
+// Middleware
 app.use(cors(corsOptions));
-
-// Enable preflight requests for all routes
-app.options('*', cors(corsOptions));
 
 // Request body parsers with increased limits
 app.use(express.json({ limit: '10mb' }));

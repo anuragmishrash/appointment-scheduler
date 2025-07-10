@@ -9,8 +9,6 @@
     "client": "cd client && npm start",
     "dev": "concurrently \"npm run server\" \"npm run client\"",
     "start-app": "node start.js",
-    "verify-deployment": "node verify-deployment.js",
-    "pre-push": "node pre-push-check.js",
     "install-all": "npm install && cd server && npm install && cd ../client && npm install",
     "build": "cd client && npm run build",
     "heroku-postbuild": "NPM_CONFIG_PRODUCTION=false npm install --prefix client && npm run build --prefix client"
@@ -28,8 +26,6 @@
   "dependencies": {
     "@react-three/drei": "^10.3.0",
     "@react-three/fiber": "^9.1.2",
-    "axios": "^1.6.7",
-    "dotenv": "^16.6.1",
     "framer-motion": "^12.18.1",
     "three": "^0.177.0"
   }

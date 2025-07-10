@@ -8,22 +8,6 @@ This guide will walk you through the deployment process for the Appointment Sche
 - MongoDB database (local or Atlas)
 - Gmail account for sending notifications (optional)
 
-## Pre-Deployment Verification
-
-Before deploying, run the verification script to check for common configuration issues:
-
-```bash
-npm run verify-deployment
-```
-
-This script will:
-- Check for environment variables in your .env files
-- Validate your JWT_SECRET and other critical configurations
-- Ensure package.json scripts are properly set up
-- Verify API accessibility
-
-Fix any issues reported by the verification script before proceeding with deployment.
-
 ## Environment Configuration
 
 ### Server Environment Variables
@@ -45,7 +29,6 @@ CLIENT_URL=https://your-client-url.com
 - JWT_SECRET must be at least 32 characters for security
 - TIMEZONE should match your local timezone to ensure appointments are displayed correctly
 - For EMAIL_PASS, use an App Password from Google, not your account password
-- CLIENT_URL can be a comma-separated list of multiple client URLs
 
 ### Client Environment Variables
 
@@ -76,42 +59,12 @@ REACT_APP_API_URL=https://your-api-url.com
 4. Add your environment variables
 5. Deploy the application
 
-## CORS Configuration for Multiple Domains
-
-If your application will be accessed from multiple domains, add them all to the CLIENT_URL environment variable as a comma-separated list:
-
-```
-CLIENT_URL=https://domain1.com,https://domain2.com,https://domain3.com
-```
-
-The server will automatically add these domains to the allowed CORS origins.
-
 ## Post-Deployment Verification
 
 1. Test user registration and login
 2. Confirm appointment booking works
 3. Verify email notifications are being sent
 4. Check timezone handling for appointments
-
-## Avoiding Network Errors
-
-To prevent network errors like the ones you might have experienced:
-
-1. **Proper CORS Configuration**:
-   - Ensure all client domains are added to the CLIENT_URL environment variable
-   - The server now supports multiple client domains and has improved CORS handling
-
-2. **Authentication Robustness**:
-   - The application now cleans localStorage thoroughly before login attempts
-   - Error handling has been improved to provide clearer messages
-
-3. **Server Connection Management**:
-   - New server status checking component will notify users of API availability
-   - Connection retry logic has been added for temporary network issues
-
-4. **Deployment Environment Variables**:
-   - Verify all environment variables are properly set in your deployment platform
-   - JWT_SECRET must be consistent across all deployments
 
 ## Common Issues & Troubleshooting
 
