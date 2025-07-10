@@ -2,163 +2,58 @@
 
 This guide provides solutions for common issues you might encounter when running or deploying the Appointment Scheduler application.
 
-## Authentication Issues
+## Troubleshooting Guide
 
-### Network Error During Login/Signup
+### Cross-Device Login Issues
 
-**Problem**: Login/signup fails with network errors on some devices (like laptops) but works on others (like mobile phones).
+If you're experiencing login issues when switching between devices:
 
-**Solution**:
+1. **Check local storage**: Make sure your browser allows local storage for the application domain
+2. **Clear browser cache**: Try clearing your browser cache and cookies
+3. **Check for timezone differences**: Different timezones can cause token validation issues
+4. **Browser compatibility**: Some older browsers don't support all the features used in the app
 
-1. **Clear Browser Storage**:
-   - Open browser DevTools (F12)
-   - Go to Application > Storage > Clear Site Data
-   - Try logging in again
+### Authentication Issues
 
-2. **Try Incognito/Private Mode**:
-   - Open a private/incognito window
-   - Try logging in from there
+If login/signup doesn't persist after some time:
 
-3. **Different Browser**:
-   - If it works on mobile but not desktop, try a different browser
-   - This often helps bypass browser-specific caching issues
+1. **JWT token expiration**: The default token expiration is 24 hours
+2. **Server restart**: If the server restarts, it will invalidate sessions if using memory storage
+3. **Environment variables**: Make sure JWT_SECRET is properly set in your environment
 
-4. **After Mobile Login Success**:
-   - If you successfully login from your mobile device, try your desktop again
-   - The successful authentication might clear server-side session conflicts
+### Connection Issues
 
-5. **Check Network Connection**:
-   - Ensure stable internet connection
-   - Some firewalls or network security tools can interfere with authentication requests
+#### "Server is currently unavailable" / "Network error" Messages
 
-### JWT Token Issues
+If you see these errors on your deployed application (especially on Render):
 
-**Problem**: Authentication initially works but fails after some time.
+1. **Free-tier limitations**: Render's free tier spins down services after 15 minutes of inactivity. When a user visits later, the service needs 30-60 seconds to spin up, which can appear as connection errors.
 
-**Solution**:
+2. **Solutions**:
 
-1. **Check Server Environment Variables**:
-   - Verify JWT_SECRET is properly set and not empty
-   - Ensure it's at least 32 characters long
-   - Make sure it's consistent across all deployment environments
+   - **Wait for spin-up**: If you see "Server is waking up from sleep mode" message, simply wait 30-60 seconds for the server to initialize.
+   
+   - **Setup a ping service**: The application includes an internal ping mechanism to prevent spin-down, but you can enhance this:
+     - Create an account on [UptimeRobot](https://uptimerobot.com) (free)
+     - Add a new HTTP monitor for your app's health endpoint (`https://your-app-url.onrender.com/api/health`)
+     - Set the monitoring interval to 5 minutes
+   
+   - **Upgrade to paid tier**: For critical applications, consider upgrading to Render's paid tier ($7+/month) which doesn't spin down
 
-2. **Server Timezone Configuration**:
-   - Confirm TIMEZONE environment variable is set correctly
-   - Token expiration is time-sensitive
+3. **Persistent connection issues**: If issues persist even after the spin-up period:
+   - Check Render dashboard for service logs and errors
+   - Ensure your MongoDB connection string is correct
+   - Check if you've reached free tier resource limits
 
-3. **Browser Storage Issues**:
-   - Some browsers restrict localStorage in certain contexts
-   - Try using sessionStorage instead if persistent issues occur
+### Database Issues
 
-## Appointment Status Issues
+1. **Connection refused**: Verify MongoDB is running and accessible
+2. **Authentication failed**: Check database credentials
+3. **Timeout errors**: Could indicate network issues or overloaded database
 
-### Appointments Incorrectly Marked as Expired or Missed
+### Other Common Issues
 
-**Problem**: Appointments are being marked as expired or missed even though they shouldn't be.
-
-**Solution**:
-
-1. **Timezone Settings**:
-   - Check server's TIMEZONE environment variable
-   - Ensure browser timezone matches your local timezone
-   - Verify appointment times are interpreted correctly
-
-2. **Server Time**:
-   - Make sure server's system clock is accurate
-   - NTP sync issues can cause timing problems
-
-3. **Grace Period Settings**:
-   - The system allows a 15-minute grace period for missed appointments
-   - Check if this setting needs adjustment for your use case
-
-## Database Connection Issues
-
-### MongoDB Connection Failures
-
-**Problem**: Application fails to connect to the database.
-
-**Solution**:
-
-1. **Check MongoDB URI**:
-   - Verify the connection string is correct
-   - Ensure credentials are valid
-   - Test connection with MongoDB Compass
-
-2. **Network Access**:
-   - If using MongoDB Atlas, check IP whitelist
-   - Some hosting providers restrict outbound connections
-
-3. **MongoDB Version Compatibility**:
-   - Ensure your MongoDB version is compatible with the drivers
-
-## Email Notification Issues
-
-### Notifications Not Being Sent
-
-**Problem**: Appointment reminders or confirmation emails are not being delivered.
-
-**Solution**:
-
-1. **Email Credentials**:
-   - Check EMAIL_USER and EMAIL_PASS environment variables
-   - For Gmail, ensure you're using an App Password, not account password
-
-2. **Email Service Status**:
-   - Gmail and other providers may have sending limits
-   - Check for temporary service disruptions
-
-3. **Spam Filters**:
-   - Emails might be delivered to spam folders
-   - Check spam/junk folders for missing emails
-
-## Cross-Browser/Cross-Device Issues
-
-### Interface Rendering Problems
-
-**Problem**: UI elements don't appear correctly on certain browsers/devices.
-
-**Solution**:
-
-1. **Browser Compatibility**:
-   - The app is optimized for Chrome, Firefox, Safari, and Edge
-   - Try updating your browser to the latest version
-
-2. **Mobile Responsiveness**:
-   - Some views may render differently on mobile
-   - Use landscape orientation for complex interfaces
-
-3. **Clear Cache**:
-   - Force refresh with Ctrl+F5 or Cmd+Shift+R
-   - Clear browser cache completely for persistent issues
-
-## Development Environment Issues
-
-### Hot Reloading Not Working
-
-**Problem**: Changes to code aren't reflected in the development environment.
-
-**Solution**:
-
-1. **Restart Development Server**:
-   - Stop the server (Ctrl+C)
-   - Restart with `npm start`
-
-2. **Check Dependencies**:
-   - Run `npm install` to ensure all dependencies are up to date
-   - Check for conflicting package versions
-
-3. **File Watching Limits**:
-   - On Linux systems, you might need to increase file watching limits
-   - Run `echo fs.inotify.max_user_watches=524288 | sudo tee -a /etc/sysctl.conf && sudo sysctl -p`
-
-## Still Having Issues?
-
-If you've tried these solutions and are still experiencing problems:
-
-1. Check the server logs for detailed error messages
-2. Consult the GitHub issues page to see if others have reported similar problems
-3. Open a new issue with detailed information about the problem, including:
-   - Your environment (OS, browser version, Node.js version)
-   - Steps to reproduce the issue
-   - Error messages (from console or logs)
-   - Screenshots if applicable 
+1. **CORS errors**: Check that your frontend origin is properly configured in the CORS settings
+2. **Missing dependencies**: Run `npm install` in both client and server directories
+3. **Port conflicts**: Make sure the required ports (5000 for server, 3000 for client) are available
+4. **Memory limitations**: Free tier hosting often has memory constraints 

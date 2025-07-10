@@ -172,6 +172,11 @@ app.get('/', (req, res) => {
   res.send('🚀 Appointment Scheduler Backend is Running!');
 });
 
+// Add a health check endpoint
+app.get('/api/health', (req, res) => {
+  res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
 // Configure nodemailer for expired appointments
 const transporter = nodemailer.createTransport({
   service: 'gmail',
@@ -712,6 +717,34 @@ if (process.env.NODE_ENV === 'production') {
   app.get('*', (req, res) => {
     res.sendFile(path.resolve(__dirname, '../client', 'build', 'index.html'));
   });
+}
+
+// Setup keep-alive service for production
+if (process.env.NODE_ENV === 'production') {
+  // Simple keep-alive mechanism to prevent Render from spinning down
+  const PING_INTERVAL = 840000; // 14 minutes (just under Render's 15-min timeout)
+  const keepAliveUrl = process.env.RENDER_EXTERNAL_URL || `http://localhost:${PORT}`;
+  
+  console.log(`Setting up keep-alive service for ${keepAliveUrl}`);
+  
+  // Internal ping
+  setInterval(() => {
+    fetch(`${keepAliveUrl}/api/health`)
+      .then(response => {
+        if (response.ok) {
+          console.log(`[${new Date().toISOString()}] Keep-alive ping successful`);
+        } else {
+          console.log(`[${new Date().toISOString()}] Keep-alive ping failed with status: ${response.status}`);
+        }
+      })
+      .catch(error => {
+        console.log(`[${new Date().toISOString()}] Keep-alive ping error: ${error.message}`);
+      });
+  }, PING_INTERVAL);
+
+  // Set up external ping service instructions
+  const { setupExternalPingService } = require('./utils/keepAlive');
+  setupExternalPingService(keepAliveUrl);
 }
 
 // Custom error handling middleware

@@ -358,3 +358,23 @@ For detailed deployment instructions, including setting up authentication proper
 ## License
 
 This project is licensed under the MIT License - see the LICENSE file for details. 
+
+## Deployment
+
+This application can be deployed on platforms like Render, Heroku, or Vercel.
+
+### Free Tier Deployment Notes
+
+When deploying on free-tier services (like Render's free tier):
+
+1. **Server Sleep:** Free services typically put your server to sleep after 15 minutes of inactivity.
+2. **Cold Starts:** When a user visits after inactivity, there's a 30-60 second delay while the server wakes up.
+3. **Keep-Alive:** This app includes built-in mechanisms to prevent spin-down:
+   - Internal ping service that runs every 14 minutes
+   - User-friendly UI that shows "Server is waking up..." during cold starts
+   
+4. **For more reliable deployments:**
+   - Set up an external ping service using [UptimeRobot](https://uptimerobot.com) (free)
+   - Or upgrade to a paid tier ($7+/month on Render) that doesn't sleep
+
+See `TROUBLESHOOTING.md` for detailed information on handling deployment issues. 
