@@ -172,7 +172,7 @@ app.get('/', (req, res) => {
   res.send('🚀 Appointment Scheduler Backend is Running!');
 });
 
-// Add a health check endpoint
+// Health check endpoint
 app.get('/api/health', (req, res) => {
   res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() });
 });

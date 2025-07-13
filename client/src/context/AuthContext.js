@@ -11,6 +11,8 @@ export const AuthProvider = ({ children }) => {
   const [token, setToken] = useState(localStorage.getItem('token'));
   const [loading, setLoading] = useState(true);
   const [authError, setAuthError] = useState(null);
+  const [serverWakingUp, setServerWakingUp] = useState(false);
+  const [authAttemptCount, setAuthAttemptCount] = useState(0);
 
   // Set token in axios headers
   useEffect(() => {
@@ -37,8 +39,10 @@ export const AuthProvider = ({ children }) => {
       }
 
       try {
+        setServerWakingUp(false); // Reset server waking up state
         const res = await api.get('/api/auth/profile');
         setUser(res.data);
+        setAuthAttemptCount(0); // Reset attempt count on success
       } catch (error) {
         console.error('Error loading user:', error);
         
@@ -46,21 +50,59 @@ export const AuthProvider = ({ children }) => {
         if (error.response && error.response.status === 401) {
           setAuthError('Session expired or invalid. Please log in again.');
           toast.error('Your session has expired. Please log in again.');
+          logout();
         } else if (!error.response) {
-          // Network error
+          // Network error - could be server waking up
+          setAuthAttemptCount(prevCount => {
+            const newCount = prevCount + 1;
+            
+            // If we've had multiple failed attempts, it could be a server spin-up delay
+            if (newCount >= 2) {
+              setServerWakingUp(true);
+              toast.info("Server may be waking up from sleep mode. Please wait...", {
+                autoClose: false,
+                toastId: "server-waking"
+              });
+              
+              // Try again after a delay
+              const retryDelay = Math.min(2000 * Math.pow(1.5, newCount), 30000);
+              setTimeout(loadUser, retryDelay);
+            }
+            
+            return newCount;
+          });
+          
           setAuthError('Network error. Please check your connection.');
-          toast.error('Network error. Please check your connection.');
         }
-        
-        // Logout on auth errors
-        logout();
       } finally {
         setLoading(false);
       }
     };
 
     loadUser();
-  }, [token]);
+    
+    // Check server status periodically when having issues
+    let intervalId;
+    if (serverWakingUp) {
+      intervalId = setInterval(async () => {
+        try {
+          // Try a simple health check
+          await api.get('/api/health');
+          setServerWakingUp(false);
+          toast.dismiss("server-waking");
+          toast.success("Server is now available!");
+          loadUser(); // Try loading the user again
+          clearInterval(intervalId);
+        } catch (error) {
+          // Still unavailable
+        }
+      }, 5000);
+    }
+    
+    return () => {
+      if (intervalId) clearInterval(intervalId);
+    };
+  }, [token, serverWakingUp]);
 
   // Register user
   const register = async (userData) => {
@@ -230,6 +272,7 @@ export const AuthProvider = ({ children }) => {
     token,
     loading,
     authError,
+    serverWakingUp,
     register,
     login,
     logout,

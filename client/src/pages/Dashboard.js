@@ -3,6 +3,7 @@ import { Link as RouterLink, Navigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import api from '../api/axios';
 import notificationService from '../services/NotificationService';
+import ServerStatusCheck from '../components/common/ServerStatusCheck';
 import {
   Box,
   Typography,
@@ -58,6 +59,7 @@ const Dashboard = () => {
   const [appointments, setAppointments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [serverStatus, setServerStatus] = useState('checking');
   const [showNotificationBanner, setShowNotificationBanner] = useState(false);
   const [tabValue, setTabValue] = useState(0);
   const [autoCancelledAppointments, setAutoCancelledAppointments] = useState([]);
@@ -83,134 +85,145 @@ const Dashboard = () => {
 
   const openNotifications = Boolean(anchorEl);
 
-  useEffect(() => {
-    const fetchAppointments = async () => {
-      try {
-        const res = await api.get('/api/appointments');
-        // For regular users, just show all their appointments
-        setAppointments(res.data);
+  // Server status handler
+  const handleServerStatusChange = (status) => {
+    setServerStatus(status);
+    if (status === 'online' && error === 'Failed to load appointments') {
+      // Retry fetching appointments if server is now online
+      fetchAppointments();
+    }
+  };
+
+  // Move the fetchAppointments function outside useEffect so it can be reused
+  const fetchAppointments = async () => {
+    try {
+      setLoading(true);
+      const res = await api.get('/api/appointments');
+      // For regular users, just show all their appointments
+      setAppointments(res.data);
+      
+      // Generate notifications
+      const now = new Date();
+      const newNotifications = [];
+      let unread = 0;
+      
+      // Check for recently auto-cancelled appointments
+      const oneDayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+      
+      const recentAutoCancelled = res.data.filter(app => {
+        // Check if the appointment was auto-cancelled
+        return app.status === 'cancelled' && app.autoCancelled === true;
+      });
+      
+      if (recentAutoCancelled.length > 0) {
+        setAutoCancelledAppointments(recentAutoCancelled);
+        setShowAutoCancelledAlert(true);
         
-        // Generate notifications
-        const now = new Date();
-        const newNotifications = [];
-        let unread = 0;
-        
-        // Check for recently auto-cancelled appointments
-        const oneDayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-        
-        const recentAutoCancelled = res.data.filter(app => {
-          // Check if the appointment was auto-cancelled
-          return app.status === 'cancelled' && app.autoCancelled === true;
-        });
-        
-        if (recentAutoCancelled.length > 0) {
-          setAutoCancelledAppointments(recentAutoCancelled);
-          setShowAutoCancelledAlert(true);
-          
-          // Add to notifications
-          recentAutoCancelled.forEach(app => {
-            newNotifications.push({
-              id: `auto-cancelled-${app._id}`,
-              type: 'auto-cancelled',
-              message: `Your appointment for ${formatDate(app.date)} at ${app.startTime} was auto-cancelled`,
-              appointmentId: app._id,
-              time: new Date(app.updatedAt || app.createdAt)
-            });
-            unread++;
+        // Add to notifications
+        recentAutoCancelled.forEach(app => {
+          newNotifications.push({
+            id: `auto-cancelled-${app._id}`,
+            type: 'auto-cancelled',
+            message: `Your appointment for ${formatDate(app.date)} at ${app.startTime} was auto-cancelled`,
+            appointmentId: app._id,
+            time: new Date(app.updatedAt || app.createdAt)
           });
-        }
-
-        // Check for missed appointments (in last 24 hours)
-        const recentMissed = res.data.filter(app => {
-          const updatedAt = app.updatedAt ? new Date(app.updatedAt) : new Date(app.createdAt);
-          return app.status === 'missed' && updatedAt >= oneDayAgo;
+          unread++;
         });
+      }
 
-        if (recentMissed.length > 0) {
-          setMissedAppointments(recentMissed);
-          setShowMissedAlert(true);
-          
-          // Add to notifications
-          recentMissed.forEach(app => {
-            newNotifications.push({
-              id: `missed-${app._id}`,
-              type: 'missed',
-              message: `Your appointment for ${formatDate(app.date)} at ${app.startTime} was marked as missed`,
-              appointmentId: app._id,
-              time: new Date(app.updatedAt || app.createdAt)
-            });
-            unread++;
+      // Check for missed appointments (in last 24 hours)
+      const recentMissed = res.data.filter(app => {
+        const updatedAt = app.updatedAt ? new Date(app.updatedAt) : new Date(app.createdAt);
+        return app.status === 'missed' && updatedAt >= oneDayAgo;
+      });
+
+      if (recentMissed.length > 0) {
+        setMissedAppointments(recentMissed);
+        setShowMissedAlert(true);
+        
+        // Add to notifications
+        recentMissed.forEach(app => {
+          newNotifications.push({
+            id: `missed-${app._id}`,
+            type: 'missed',
+            message: `Your appointment for ${formatDate(app.date)} at ${app.startTime} was marked as missed`,
+            appointmentId: app._id,
+            time: new Date(app.updatedAt || app.createdAt)
           });
-        }
+          unread++;
+        });
+      }
 
-        // Check for upcoming appointments in next 10-30 minutes
-        const upcomingApptsWindow = res.data.filter(app => {
-          // Only look at scheduled appointments for today
-          if (app.status !== 'scheduled') return false;
-          
-          const apptDate = new Date(app.date);
-          // Check if it's today
-          if (apptDate.toDateString() !== now.toDateString()) return false;
+      // Check for upcoming appointments in next 10-30 minutes
+      const upcomingApptsWindow = res.data.filter(app => {
+        // Only look at scheduled appointments for today
+        if (app.status !== 'scheduled') return false;
+        
+        const apptDate = new Date(app.date);
+        // Check if it's today
+        if (apptDate.toDateString() !== now.toDateString()) return false;
 
-          // Parse the start time
+        // Parse the start time
+        const [hours, minutes] = app.startTime.split(':').map(Number);
+        const apptTime = new Date(apptDate);
+        apptTime.setHours(hours, minutes);
+        
+        // Calculate time difference in minutes
+        const diffMinutes = Math.floor((apptTime - now) / (1000 * 60));
+        
+        // Consider appointments between 10-30 minutes from now
+        return diffMinutes >= 0 && diffMinutes <= 30;
+      });
+
+      if (upcomingApptsWindow.length > 0) {
+        setUpcomingAppointments(upcomingApptsWindow);
+        setShowUpcomingAlert(true);
+        
+        // Add to notifications
+        upcomingApptsWindow.forEach(app => {
           const [hours, minutes] = app.startTime.split(':').map(Number);
-          const apptTime = new Date(apptDate);
+          const apptTime = new Date(new Date(app.date));
           apptTime.setHours(hours, minutes);
           
           // Calculate time difference in minutes
           const diffMinutes = Math.floor((apptTime - now) / (1000 * 60));
           
-          // Consider appointments between 10-30 minutes from now
-          return diffMinutes >= 0 && diffMinutes <= 30;
-        });
-
-        if (upcomingApptsWindow.length > 0) {
-          setUpcomingAppointments(upcomingApptsWindow);
-          setShowUpcomingAlert(true);
-          
-          // Add to notifications
-          upcomingApptsWindow.forEach(app => {
-            const [hours, minutes] = app.startTime.split(':').map(Number);
-            const apptTime = new Date(new Date(app.date));
-            apptTime.setHours(hours, minutes);
-            
-            // Calculate time difference in minutes
-            const diffMinutes = Math.floor((apptTime - now) / (1000 * 60));
-            
-            newNotifications.push({
-              id: `upcoming-${app._id}`,
-              type: 'upcoming',
-              message: `Upcoming appointment in ${diffMinutes} minutes at ${app.startTime}`,
-              appointmentId: app._id,
-              time: new Date()
-            });
-            unread++;
+          newNotifications.push({
+            id: `upcoming-${app._id}`,
+            type: 'upcoming',
+            message: `Upcoming appointment in ${diffMinutes} minutes at ${app.startTime}`,
+            appointmentId: app._id,
+            time: new Date()
           });
-        }
-        
-        // Sort notifications by time (newest first)
-        newNotifications.sort((a, b) => b.time - a.time);
-        setNotifications(newNotifications);
-        setUnreadCount(unread);
-        
-        // Schedule notifications for upcoming appointments
-        if (res.data && res.data.length > 0) {
-          // Initialize notification service first
-          await notificationService.initialize();
-          // Then schedule notifications
-          notificationService.scheduleAppointmentNotifications(res.data);
-        }
-        
-        setError('');
-      } catch (error) {
-        console.error('Error fetching appointments:', error);
-        setError('Failed to load appointments');
-        toast.error('Failed to load appointments');
-      } finally {
-        setLoading(false);
+          unread++;
+        });
       }
-    };
+      
+      // Sort notifications by time (newest first)
+      newNotifications.sort((a, b) => b.time - a.time);
+      setNotifications(newNotifications);
+      setUnreadCount(unread);
+      
+      // Schedule notifications for upcoming appointments
+      if (res.data && res.data.length > 0) {
+        // Initialize notification service first
+        await notificationService.initialize();
+        // Then schedule notifications
+        notificationService.scheduleAppointmentNotifications(res.data);
+      }
+      
+      setError('');
+    } catch (error) {
+      console.error('Error fetching appointments:', error);
+      setError('Failed to load appointments');
+      toast.error('Failed to load appointments');
+    } finally {
+      setLoading(false);
+    }
+  };
 
+  useEffect(() => {
     if (user) {
       fetchAppointments();
       
@@ -221,7 +234,9 @@ const Dashboard = () => {
 
       // Set up a refresh interval to check for appointment status changes
       const intervalId = setInterval(() => {
-        fetchAppointments();
+        if (serverStatus === 'online') {
+          fetchAppointments();
+        }
       }, 60000); // Refresh every minute
 
       return () => {
@@ -234,7 +249,7 @@ const Dashboard = () => {
     return () => {
       notificationService.clearAllNotifications();
     };
-  }, [user]);
+  }, [user, serverStatus]);
 
   // Handle closing the auto-cancelled alert
   const handleAutoCancelledAlertClose = () => {
@@ -393,280 +408,286 @@ const Dashboard = () => {
   }
 
   return (
-    <Box>
-      {/* Notification permission banner */}
-      <Snackbar
-        open={showNotificationBanner}
-        anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
-      >
-        <Alert 
-          severity="info" 
-          action={
-            <Button 
-              color="inherit" 
-              size="small" 
-              startIcon={<NotificationsIcon />}
-              onClick={handleEnableNotifications}
-            >
-              Enable
-            </Button>
-          }
-          onClose={() => setShowNotificationBanner(false)}
+    <>
+      {!user && <Navigate to="/login" />}
+      
+      <Box sx={{ maxWidth: 1200, margin: '0 auto', p: 2 }}>
+        <ServerStatusCheck onStatusChange={handleServerStatusChange} />
+        
+        {/* Notification permission banner */}
+        <Snackbar
+          open={showNotificationBanner}
+          anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
         >
-          Enable notifications to receive appointment reminders
-        </Alert>
-      </Snackbar>
-
-      {/* Auto-cancelled appointments alert */}
-      <Snackbar
-        open={showAutoCancelledAlert}
-        anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
-        autoHideDuration={10000}
-        onClose={handleAutoCancelledAlertClose}
-      >
-        <Alert 
-          severity="warning" 
-          onClose={handleAutoCancelledAlertClose}
-          sx={{ width: '100%' }}
-        >
-          {autoCancelledAppointments.length === 1 ? (
-            <Typography variant="body2">
-              Your appointment for {formatDate(autoCancelledAppointments[0].date)} at {autoCancelledAppointments[0].startTime} has been automatically marked as missed as the time has passed.
-            </Typography>
-          ) : (
-            <Typography variant="body2">
-              {autoCancelledAppointments.length} appointments have been automatically marked as missed as their scheduled times have passed.
-            </Typography>
-          )}
-        </Alert>
-      </Snackbar>
-
-      {/* Missed appointments alert */}
-      <Snackbar
-        open={showMissedAlert}
-        anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
-        autoHideDuration={10000}
-        onClose={handleMissedAlertClose}
-      >
-        <Alert 
-          severity="error" 
-          onClose={handleMissedAlertClose}
-          sx={{ width: '100%' }}
-        >
-          {missedAppointments.length === 1 ? (
-            <Typography variant="body2">
-              Your appointment for {formatDate(missedAppointments[0].date)} at {missedAppointments[0].startTime} has been marked as missed.
-            </Typography>
-          ) : (
-            <Typography variant="body2">
-              {missedAppointments.length} appointments have been marked as missed.
-            </Typography>
-          )}
-        </Alert>
-      </Snackbar>
-
-      {/* Upcoming appointments reminder */}
-      <Snackbar
-        open={showUpcomingAlert}
-        anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
-        autoHideDuration={30000}
-        onClose={handleUpcomingAlertClose}
-      >
-        <Alert 
-          severity="info" 
-          onClose={handleUpcomingAlertClose}
-          sx={{ width: '100%' }}
-        >
-          {upcomingAppointments.length === 1 ? (
-            <Typography variant="body2">
-              Reminder: Your appointment for {formatDate(upcomingAppointments[0].date)} at {upcomingAppointments[0].startTime} is coming up soon.
-            </Typography>
-          ) : (
-            <Typography variant="body2">
-              Reminder: You have {upcomingAppointments.length} appointments coming up soon.
-            </Typography>
-          )}
-        </Alert>
-      </Snackbar>
-
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 4 }}>
-        <Typography variant="h4" component="h1">
-          My Dashboard
-        </Typography>
-        <Box sx={{ display: 'flex', alignItems: 'center' }}>
-          <IconButton 
-            color="primary" 
-            onClick={handleNotificationClick} 
-            sx={{ mr: 2 }}
-            aria-label="notifications"
-          >
-            <Badge badgeContent={unreadCount} color="error">
-              <NotificationsIcon />
-            </Badge>
-          </IconButton>
-          <Button
-            variant="contained"
-            color="primary"
-            startIcon={<AddIcon />}
-            component={RouterLink}
-            to="/appointments/new"
-            sx={{ mr: 2 }}
-          >
-            Book Appointment
-          </Button>
-          <Button
-            variant="outlined"
-            component={RouterLink}
-            to="/calendar"
-          >
-            Calendar View
-          </Button>
-        </Box>
-      </Box>
-
-      {/* Notifications Popover */}
-      <Popover
-        open={openNotifications}
-        anchorEl={anchorEl}
-        onClose={handleNotificationClose}
-        anchorOrigin={{
-          vertical: 'bottom',
-          horizontal: 'right',
-        }}
-        transformOrigin={{
-          vertical: 'top',
-          horizontal: 'right',
-        }}
-      >
-        <Box sx={{ width: 320, maxHeight: 400, overflow: 'auto' }}>
-          <List>
-            {notifications.length === 0 ? (
-              <ListItem>
-                <ListItemText primary="No notifications" />
-              </ListItem>
-            ) : (
-              notifications.map((notification) => (
-                <ListItem
-                  key={notification.id}
-                  button
-                  component={notification.appointmentId ? RouterLink : 'div'}
-                  to={notification.appointmentId ? `/appointments/${notification.appointmentId}` : undefined}
-                  sx={{
-                    borderLeft: `4px solid ${
-                      notification.type === 'missed' ? '#f44336' : 
-                      notification.type === 'auto-cancelled' ? '#ff9800' : 
-                      notification.type === 'upcoming' ? '#2196f3' : 'transparent'
-                    }`,
-                  }}
-                >
-                  <ListItemText 
-                    primary={notification.message} 
-                    secondary={notification.time.toLocaleString()}
-                    primaryTypographyProps={{
-                      color: 
-                        notification.type === 'missed' ? 'error' :
-                        notification.type === 'auto-cancelled' ? 'warning' : 'primary'
-                    }}
-                  />
-                </ListItem>
-              ))
-            )}
-          </List>
-        </Box>
-      </Popover>
-
-      <Typography variant="h6" sx={{ mb: 2 }}>
-        Welcome back, {user?.name}!
-      </Typography>
-
-      <Divider sx={{ mb: 4 }} />
-
-      {error && (
-        <Typography color="error" sx={{ mb: 2 }}>
-          {error}
-        </Typography>
-      )}
-
-      {appointments.length === 0 ? (
-        <Card sx={{ mb: 4, p: 2 }}>
-          <CardContent>
-            <Typography variant="body1" align="center">
-              You don't have any appointments yet.
-            </Typography>
-            <Box sx={{ display: 'flex', justifyContent: 'center', mt: 2 }}>
-              <Button
-                variant="contained"
-                component={RouterLink}
-                to="/appointments/new"
-                startIcon={<AddIcon />}
+          <Alert 
+            severity="info" 
+            action={
+              <Button 
+                color="inherit" 
+                size="small" 
+                startIcon={<NotificationsIcon />}
+                onClick={handleEnableNotifications}
               >
-                Book Your First Appointment
+                Enable
               </Button>
-            </Box>
-          </CardContent>
-        </Card>
-      ) : (
-        <Paper sx={{ width: '100%', mb: 4 }}>
-          <Tabs
-            value={tabValue}
-            onChange={handleTabChange}
-            indicatorColor="primary"
-            textColor="primary"
-            centered
-            variant="fullWidth"
-            aria-label="appointment tabs"
-            sx={{ borderBottom: 1, borderColor: 'divider' }}
+            }
+            onClose={() => setShowNotificationBanner(false)}
           >
-            <Tab label={`ALL APPOINTMENTS (${appointments.length})`} />
-            <Tab label={`SCHEDULED (${scheduledAppointments.length})`} />
-            <Tab label={`CANCELLED (${cancelledAppointments.length})`} />
-            <Tab label={`MISSED (${missedAppointments.length})`} />
-          </Tabs>
+            Enable notifications to receive appointment reminders
+          </Alert>
+        </Snackbar>
 
-          <TabPanel value={tabValue} index={0}>
-            <Grid container spacing={3}>
-              {appointments.map(renderAppointmentCard)}
-            </Grid>
-          </TabPanel>
-          
-          <TabPanel value={tabValue} index={1}>
-            {scheduledAppointments.length === 0 ? (
-              <Typography variant="body1" align="center" sx={{ py: 4 }}>
-                You don't have any scheduled appointments.
+        {/* Auto-cancelled appointments alert */}
+        <Snackbar
+          open={showAutoCancelledAlert}
+          anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
+          autoHideDuration={10000}
+          onClose={handleAutoCancelledAlertClose}
+        >
+          <Alert 
+            severity="warning" 
+            onClose={handleAutoCancelledAlertClose}
+            sx={{ width: '100%' }}
+          >
+            {autoCancelledAppointments.length === 1 ? (
+              <Typography variant="body2">
+                Your appointment for {formatDate(autoCancelledAppointments[0].date)} at {autoCancelledAppointments[0].startTime} has been automatically marked as missed as the time has passed.
               </Typography>
             ) : (
-              <Grid container spacing={3}>
-                {scheduledAppointments.map(renderAppointmentCard)}
-              </Grid>
-            )}
-          </TabPanel>
-          
-          <TabPanel value={tabValue} index={2}>
-            {cancelledAppointments.length === 0 ? (
-              <Typography variant="body1" align="center" sx={{ py: 4 }}>
-                You don't have any cancelled appointments.
+              <Typography variant="body2">
+                {autoCancelledAppointments.length} appointments have been automatically marked as missed as their scheduled times have passed.
               </Typography>
-            ) : (
-              <Grid container spacing={3}>
-                {cancelledAppointments.map(renderAppointmentCard)}
-              </Grid>
             )}
-          </TabPanel>
+          </Alert>
+        </Snackbar>
 
-          <TabPanel value={tabValue} index={3}>
-            {missedAppointments.length === 0 ? (
-              <Typography variant="body1" align="center" sx={{ py: 4 }}>
-                You don't have any missed appointments.
+        {/* Missed appointments alert */}
+        <Snackbar
+          open={showMissedAlert}
+          anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
+          autoHideDuration={10000}
+          onClose={handleMissedAlertClose}
+        >
+          <Alert 
+            severity="error" 
+            onClose={handleMissedAlertClose}
+            sx={{ width: '100%' }}
+          >
+            {missedAppointments.length === 1 ? (
+              <Typography variant="body2">
+                Your appointment for {formatDate(missedAppointments[0].date)} at {missedAppointments[0].startTime} has been marked as missed.
               </Typography>
             ) : (
-              <Grid container spacing={3}>
-                {missedAppointments.map(renderAppointmentCard)}
-              </Grid>
+              <Typography variant="body2">
+                {missedAppointments.length} appointments have been marked as missed.
+              </Typography>
             )}
-          </TabPanel>
-        </Paper>
-      )}
-    </Box>
+          </Alert>
+        </Snackbar>
+
+        {/* Upcoming appointments reminder */}
+        <Snackbar
+          open={showUpcomingAlert}
+          anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
+          autoHideDuration={30000}
+          onClose={handleUpcomingAlertClose}
+        >
+          <Alert 
+            severity="info" 
+            onClose={handleUpcomingAlertClose}
+            sx={{ width: '100%' }}
+          >
+            {upcomingAppointments.length === 1 ? (
+              <Typography variant="body2">
+                Reminder: Your appointment for {formatDate(upcomingAppointments[0].date)} at {upcomingAppointments[0].startTime} is coming up soon.
+              </Typography>
+            ) : (
+              <Typography variant="body2">
+                Reminder: You have {upcomingAppointments.length} appointments coming up soon.
+              </Typography>
+            )}
+          </Alert>
+        </Snackbar>
+
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 4 }}>
+          <Typography variant="h4" component="h1">
+            My Dashboard
+          </Typography>
+          <Box sx={{ display: 'flex', alignItems: 'center' }}>
+            <IconButton 
+              color="primary" 
+              onClick={handleNotificationClick} 
+              sx={{ mr: 2 }}
+              aria-label="notifications"
+            >
+              <Badge badgeContent={unreadCount} color="error">
+                <NotificationsIcon />
+              </Badge>
+            </IconButton>
+            <Button
+              variant="contained"
+              color="primary"
+              startIcon={<AddIcon />}
+              component={RouterLink}
+              to="/appointments/new"
+              sx={{ mr: 2 }}
+            >
+              Book Appointment
+            </Button>
+            <Button
+              variant="outlined"
+              component={RouterLink}
+              to="/calendar"
+            >
+              Calendar View
+            </Button>
+          </Box>
+        </Box>
+
+        {/* Notifications Popover */}
+        <Popover
+          open={openNotifications}
+          anchorEl={anchorEl}
+          onClose={handleNotificationClose}
+          anchorOrigin={{
+            vertical: 'bottom',
+            horizontal: 'right',
+          }}
+          transformOrigin={{
+            vertical: 'top',
+            horizontal: 'right',
+          }}
+        >
+          <Box sx={{ width: 320, maxHeight: 400, overflow: 'auto' }}>
+            <List>
+              {notifications.length === 0 ? (
+                <ListItem>
+                  <ListItemText primary="No notifications" />
+                </ListItem>
+              ) : (
+                notifications.map((notification) => (
+                  <ListItem
+                    key={notification.id}
+                    button
+                    component={notification.appointmentId ? RouterLink : 'div'}
+                    to={notification.appointmentId ? `/appointments/${notification.appointmentId}` : undefined}
+                    sx={{
+                      borderLeft: `4px solid ${
+                        notification.type === 'missed' ? '#f44336' : 
+                        notification.type === 'auto-cancelled' ? '#ff9800' : 
+                        notification.type === 'upcoming' ? '#2196f3' : 'transparent'
+                      }`,
+                    }}
+                  >
+                    <ListItemText 
+                      primary={notification.message} 
+                      secondary={notification.time.toLocaleString()}
+                      primaryTypographyProps={{
+                        color: 
+                          notification.type === 'missed' ? 'error' :
+                          notification.type === 'auto-cancelled' ? 'warning' : 'primary'
+                      }}
+                    />
+                  </ListItem>
+                ))
+              )}
+            </List>
+          </Box>
+        </Popover>
+
+        <Typography variant="h6" sx={{ mb: 2 }}>
+          Welcome back, {user?.name}!
+        </Typography>
+
+        <Divider sx={{ mb: 4 }} />
+
+        {error && (
+          <Typography color="error" sx={{ mb: 2 }}>
+            {error}
+          </Typography>
+        )}
+
+        {appointments.length === 0 ? (
+          <Card sx={{ mb: 4, p: 2 }}>
+            <CardContent>
+              <Typography variant="body1" align="center">
+                You don't have any appointments yet.
+              </Typography>
+              <Box sx={{ display: 'flex', justifyContent: 'center', mt: 2 }}>
+                <Button
+                  variant="contained"
+                  component={RouterLink}
+                  to="/appointments/new"
+                  startIcon={<AddIcon />}
+                >
+                  Book Your First Appointment
+                </Button>
+              </Box>
+            </CardContent>
+          </Card>
+        ) : (
+          <Paper sx={{ width: '100%', mb: 4 }}>
+            <Tabs
+              value={tabValue}
+              onChange={handleTabChange}
+              indicatorColor="primary"
+              textColor="primary"
+              centered
+              variant="fullWidth"
+              aria-label="appointment tabs"
+              sx={{ borderBottom: 1, borderColor: 'divider' }}
+            >
+              <Tab label={`ALL APPOINTMENTS (${appointments.length})`} />
+              <Tab label={`SCHEDULED (${scheduledAppointments.length})`} />
+              <Tab label={`CANCELLED (${cancelledAppointments.length})`} />
+              <Tab label={`MISSED (${missedAppointments.length})`} />
+            </Tabs>
+
+            <TabPanel value={tabValue} index={0}>
+              <Grid container spacing={3}>
+                {appointments.map(renderAppointmentCard)}
+              </Grid>
+            </TabPanel>
+            
+            <TabPanel value={tabValue} index={1}>
+              {scheduledAppointments.length === 0 ? (
+                <Typography variant="body1" align="center" sx={{ py: 4 }}>
+                  You don't have any scheduled appointments.
+                </Typography>
+              ) : (
+                <Grid container spacing={3}>
+                  {scheduledAppointments.map(renderAppointmentCard)}
+                </Grid>
+              )}
+            </TabPanel>
+            
+            <TabPanel value={tabValue} index={2}>
+              {cancelledAppointments.length === 0 ? (
+                <Typography variant="body1" align="center" sx={{ py: 4 }}>
+                  You don't have any cancelled appointments.
+                </Typography>
+              ) : (
+                <Grid container spacing={3}>
+                  {cancelledAppointments.map(renderAppointmentCard)}
+                </Grid>
+              )}
+            </TabPanel>
+
+            <TabPanel value={tabValue} index={3}>
+              {missedAppointments.length === 0 ? (
+                <Typography variant="body1" align="center" sx={{ py: 4 }}>
+                  You don't have any missed appointments.
+                </Typography>
+              ) : (
+                <Grid container spacing={3}>
+                  {missedAppointments.map(renderAppointmentCard)}
+                </Grid>
+              )}
+            </TabPanel>
+          </Paper>
+        )}
+      </Box>
+    </>
   );
 };
 

@@ -359,6 +359,21 @@ For detailed deployment instructions, including setting up authentication proper
 
 This project is licensed under the MIT License - see the LICENSE file for details. 
 
+## Troubleshooting
+
+If you're experiencing issues with the application, particularly with:
+- Dashboard loading indefinitely
+- Authentication problems between devices
+- Server cold start delays (especially on free hosting tiers)
+
+Please refer to the [TROUBLESHOOTING.md](TROUBLESHOOTING.md) guide for detailed solutions.
+
+The application has been enhanced to handle server sleep issues commonly found in free tier hosting, including:
+- Server health monitoring
+- Automatic retry mechanisms
+- User-friendly notifications for server wake-up
+- Connection status indicators
+
 ## Deployment
 
 This application can be deployed on platforms like Render, Heroku, or Vercel.

@@ -1,86 +1,83 @@
 import React, { useState, useEffect } from 'react';
-import { Box, Button, Typography, CircularProgress } from '@mui/material';
-import axios from '../../api/axios';
+import { Box, Typography, CircularProgress, Alert } from '@mui/material';
+import api from '../../api/axios';
 
-const ServerStatusCheck = () => {
-  const [serverStatus, setServerStatus] = useState('checking');
+const ServerStatusCheck = ({ onStatusChange }) => {
+  const [status, setStatus] = useState('checking');
   const [retryCount, setRetryCount] = useState(0);
-  const [coldStartDetected, setColdStartDetected] = useState(false);
+  const [retryTimer, setRetryTimer] = useState(null);
+
+  const checkServerStatus = async () => {
+    try {
+      setStatus('checking');
+      // Try to hit a simple endpoint that doesn't require auth
+      await api.get('/api/health', { timeout: 5000 });
+      setStatus('online');
+      if (onStatusChange) onStatusChange('online');
+      return true;
+    } catch (error) {
+      console.error('Server health check failed:', error.message);
+      setStatus('offline');
+      if (onStatusChange) onStatusChange('offline');
+      return false;
+    }
+  };
 
   useEffect(() => {
     checkServerStatus();
+
+    // Set up regular checks
+    const intervalId = setInterval(() => {
+      checkServerStatus();
+    }, 30000); // Check every 30 seconds
+
+    return () => {
+      clearInterval(intervalId);
+      if (retryTimer) clearTimeout(retryTimer);
+    };
   }, []);
 
-  const checkServerStatus = () => {
-    setServerStatus('checking');
-    
-    axios.get('/api/health')
-      .then(() => {
-        setServerStatus('online');
-        setColdStartDetected(false);
-      })
-      .catch(err => {
-        if (retryCount < 3) {
+  useEffect(() => {
+    // If server is offline, schedule retries with increasing delay
+    if (status === 'offline') {
+      if (retryCount < 5) { // Limit to 5 retries
+        const delay = Math.min(2000 * Math.pow(1.5, retryCount), 30000); // Exponential backoff capped at 30s
+        const timer = setTimeout(() => {
           setRetryCount(prev => prev + 1);
-          // If we've tried twice and failed, it's likely a cold start
-          if (retryCount >= 1) {
-            setColdStartDetected(true);
-          }
-          setTimeout(checkServerStatus, 5000); // Retry after 5 seconds
-        } else {
-          setServerStatus('offline');
-        }
-      });
-  };
+          checkServerStatus();
+        }, delay);
+        
+        setRetryTimer(timer);
+        
+        return () => {
+          clearTimeout(timer);
+        };
+      }
+    } else if (status === 'online') {
+      // Reset retry count when back online
+      setRetryCount(0);
+    }
+  }, [status, retryCount]);
 
-  const handleRetry = () => {
-    setRetryCount(0);
-    checkServerStatus();
-  };
-
-  if (serverStatus === 'online') return null;
+  if (status === 'online') {
+    return null; // Don't show anything when server is online
+  }
 
   return (
-    <Box
-      sx={{
-        position: 'fixed',
-        top: 0,
-        left: 0,
-        right: 0,
-        zIndex: 9999,
-        p: 2,
-        backgroundColor: serverStatus === 'checking' ? '#1976d2' : '#d32f2f',
-        color: 'white',
-        display: 'flex',
-        justifyContent: 'center',
-        alignItems: 'center',
-        gap: 2,
-        boxShadow: 3,
-      }}
-    >
-      {serverStatus === 'checking' && (
-        <>
-          <CircularProgress color="inherit" size={20} />
-          <Typography variant="body1">
-            {coldStartDetected 
-              ? "Server is waking up from sleep mode. This may take up to 60 seconds..." 
-              : "Connecting to server..."}
+    <Box sx={{ mb: 2, width: '100%' }}>
+      {status === 'checking' ? (
+        <Alert severity="info" icon={<CircularProgress size={20} />}>
+          Checking server status...
+        </Alert>
+      ) : (
+        <Alert severity="warning">
+          <Typography variant="body2">
+            Server connection issue detected. {retryCount > 0 ? `Retrying... (${retryCount}/5)` : 'Will retry soon.'}
           </Typography>
-        </>
-      )}
-      
-      {serverStatus === 'offline' && (
-        <>
-          <Typography variant="body1">Server is currently unavailable.</Typography>
-          <Button 
-            variant="contained" 
-            color="inherit" 
-            size="small"
-            onClick={handleRetry}
-          >
-            Retry
-          </Button>
-        </>
+          <Typography variant="caption" sx={{ display: 'block', mt: 0.5 }}>
+            The server might be waking up from sleep mode. Please wait a moment.
+          </Typography>
+        </Alert>
       )}
     </Box>
   );
